@@ -1,0 +1,98 @@
+#include <iostream>
+#include <sstream>
+#include <boost/any.hpp>
+#include <map>
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/socket.h>
+#include <sys/un.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/stat.h>
+#include <string.h>
+#include <unistd.h>
+#include <thread>
+#include <chrono>
+
+#include "swiftrobotc/swiftrobotc.h"
+#include "swiftrobotc/msgs.h"
+#include "swiftrobotc/usbhub.h"
+
+int main(int argc, const char * argv[]) {
+    SwiftRobotClient client(USB,2345);
+    client.subscribe<base_msgs::UInt32Array>(2, [](base_msgs::UInt32Array msg) {
+        printf("uint32 \n");
+        for (int i = 0; i < msg.data.size(); i++) {
+            printf("%02x ", (unsigned char)msg.data[i]);
+        }
+        printf("\n");
+    });
+    client.subscribe<base_msgs::UInt8Array>(1, [](base_msgs::UInt8Array msg) {
+        printf("uint8 \n");
+        for (int i = 0; i < msg.data.size(); i++) {
+            printf("%02x ", (unsigned char)msg.data[i]);
+        }
+        printf("\n");
+    });
+    client.subscribe<internal_msgs::UpdateMsg>(0, [](internal_msgs::UpdateMsg msg) {
+        printf("Device : %d is now: %d\n", msg.deviceID, msg.status);
+    });
+    
+//    std::vector<char> data = {0x11, 0x22, 0x33};
+    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+    
+    base_msgs::UInt16Array msg;
+    std::vector<uint16_t> tmp = {0x11, 0x22, 0x33, 0x44, 0xbe, 0xef};
+    msg.data = tmp;
+    client.publish<base_msgs::UInt16Array>(3, msg);
+    
+    while (1);
+    
+//    USBHub hub(2348);
+//    hub.startLookingForConnections();
+//    hub.registerReceiveCallback([](char*data, size_t size) {
+//        std::string received_msg(data, size);
+//        printf("received: %s\n", received_msg.c_str());
+//        return 0;
+//    });
+//
+//    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+//
+//    std::string msg = "Hello world!!!";
+//    hub.sendPacketToAll((char*)&msg[0], msg.length());
+    
+//    while (1) {}
+    // create socket for tcp connection
+//    int c_socket;
+//    create_socket(&c_socket);
+//    // send tcp connect request
+//    uint16_t port = 2346;
+//    port = ((port<<8) & 0xFF00) | (port>>8);
+//    std::map<std::string, boost::any> connect_dict;
+//    connect_dict["ClientVersionString"] = std::string("1");
+//    connect_dict["DeviceID"] = int(deviceId);
+//    connect_dict["MessageType"] = std::string("Connect");
+//    connect_dict["PortNumber"] = int(port);
+//    connect_dict["ProgName"] = std::string("Peertalk macOS Example");
+//
+//    std::vector<char> connect_msg;
+//    Plist::writePlistXML(connect_msg, connect_dict);
+//    std::string string2(connect_msg.begin(),connect_msg.end());
+//    std::cout << (string2.data()) << std::endl;
+//    send_msg((char*)&connect_msg[0], connect_msg.size(), c_socket);
+//
+//
+//    // receive ACK
+//    receive_msg(c_socket);
+//
+//    char* hello_msg = "hello world!\n";
+//    send_msg(hello_msg, strlen(hello_msg), c_socket);
+//
+//    receive_msg(c_socket);
+//
+//    //t1.join();
+//
+//    close(l_socket);
+    return EXIT_SUCCESS;
+}
