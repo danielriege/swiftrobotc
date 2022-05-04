@@ -2,8 +2,6 @@
 
 SocketClient::SocketClient() {
     socket_fd = 0;
-    data_buffer = NULL;
-    data_buffer_capacity = 0;
 }
 
 int SocketClient::open() {
@@ -42,6 +40,8 @@ int SocketClient::open() {
         printf("%s: Error %d connecting to usbmuxd.\n", __PRETTY_FUNCTION__, errno);
         return -1;
     }
+    data_buffer = NULL;
+    data_buffer_capacity = 0;
     return 0;
 }
 
@@ -73,6 +73,8 @@ int SocketClient::open(std::string ip_address, uint16_t port) {
         printf("%s: Error %d connecting to server.\n", __PRETTY_FUNCTION__, errno);
         return -1;
     }
+    data_buffer = NULL;
+    data_buffer_capacity = 0;
     return 0;
 }
 
@@ -86,6 +88,8 @@ int SocketClient::close() {
     ::close(socket_fd);
     if (data_buffer != NULL) {
         free(data_buffer);
+        data_buffer = NULL;
+        data_buffer_capacity = 0;
     }
     return 0;
 }
@@ -184,10 +188,11 @@ void SocketClient::listenLoop(std::function<void(usbmux_header_t header, char* d
             break;
         }
         if (data_size-4 > data_buffer_capacity) {
-            if (data_buffer != NULL) {
+            if (data_buffer) {
                 // delete old array
                 free(data_buffer);
                 data_buffer = NULL;
+                data_buffer_capacity = 0;
             }
             
             data_buffer = (char*)malloc(data_size-4);
