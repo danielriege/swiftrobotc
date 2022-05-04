@@ -28,12 +28,12 @@ int SocketClient::open() {
     }
     
     // prevent SIGPIPE
-    int on = 1;
-    if (setsockopt(socket_fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on)) < 0) {
-        printf("%s: Error %d setting sockop NOSIGPIPE.\n", __PRETTY_FUNCTION__, errno);
-        return -1;
-    }
-    
+//    int on = 1;
+//    if (setsockopt(socket_fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on)) < 0) {
+//        printf("%s: Error %d setting sockop NOSIGPIPE.\n", __PRETTY_FUNCTION__, errno);
+//        return -1;
+//    }
+// does not exist on Linux   
     address.sun_family = AF_UNIX;
     strncpy(address.sun_path, USBMUXD_SOCKET_ADDRESS, sizeof(address.sun_path));
     address.sun_path[sizeof(address.sun_path) - 1] = 0;
@@ -55,11 +55,11 @@ int SocketClient::open(std::string ip_address, uint16_t port) {
         return -1;
     }
     // prevent SIGPIPE
-    int on = 1;
-    if (setsockopt(socket_fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on)) < 0) {
-        printf("%s: Error %d setting sockop NOSIGPIPE.\n", __PRETTY_FUNCTION__, errno);
-        return -1;
-    }
+//    int on = 1;
+//    if (setsockopt(socket_fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on)) < 0) {
+//        printf("%s: Error %d setting sockop NOSIGPIPE.\n", __PRETTY_FUNCTION__, errno);
+//        return -1;
+//    }
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     // Convert IPv4 and IPv6 addresses from text to binary

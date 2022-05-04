@@ -12,6 +12,7 @@
 #include <thread>
 #include <optional>
 #include <arpa/inet.h>
+#include <functional>
 
 #define USBMUXD_SOCKET_ADDRESS "/var/run/usbmuxd"
 

@@ -74,7 +74,6 @@ void USBHub::broadcastHandler(usbmux_header_t header, char*data, size_t size) {
             return;
         }
         std::string type = boost::any_cast<const std::string&>(plist_message.find(USBMUX_KEY_MESSAGETYPE)->second);
-        
         if (type == USBMUX_MESSAGETYPE_RESULT) {
             int result_code = (int)boost::any_cast<const int64_t&>(plist_message.find(USBMUX_KEY_NUMBER)->second);
             handleResult((usbmux_reply_code_t)result_code, header);
@@ -116,7 +115,8 @@ usb_device_info_t USBHub::parsePropertiesPlistDict(std::map<std::string, boost::
     device_info.connection_speed = (uint64_t)boost::any_cast<const int64_t&>(dict.find("ConnectionSpeed")->second);
     device_info.connection_type = boost::any_cast<const std::string&>(dict.find("ConnectionType")->second);
     device_info.serial_number = boost::any_cast<const std::string&>(dict.find("SerialNumber")->second);
-    device_info.udid = boost::any_cast<const std::string&>(dict.find("UDID")->second);
-    device_info.usb_serial_number = boost::any_cast<const std::string&>(dict.find("USBSerialNumber")->second);
+    // these are somehow only in usbmuxd from apple, not the open source variant
+    //device_info.udid = boost::any_cast<const std::string&>(dict.find("UDID")->second);
+    //device_info.usb_serial_number = boost::any_cast<const std::string&>(dict.find("USBSerialNumber")->second);
     return device_info;
 }
