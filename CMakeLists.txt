@@ -34,5 +34,5 @@ target_link_libraries(swiftrobotc_test ${Boost_LIBRARIES})
 target_include_directories(swiftrobotc_test PRIVATE include/ src/Plist/)
 
 install(TARGETS swiftrobotc DESTINATION lib)
-install(FILES include/swiftrobotc.h DESTINATION include)
+install(FILES ${HEADER} ${PLIST_HEADER} DESTINATION include/swiftrobotc)
 

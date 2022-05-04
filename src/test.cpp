@@ -38,7 +38,7 @@ int main(int argc, const char * argv[]) {
     });
     client.subscribe<sensor_msgs::Image>(1, [](sensor_msgs::Image msg) {
         //printf("image \n");
-       // printf("width: %d height: %d pixelFormat %s \n", msg.width, msg.height, msg.pixelFormat);
+        //printf("width: %d height: %d pixelFormat %s \n", msg.width, msg.height, msg.pixelFormat);
     });
     
 //    std::vector<char> data = {0x11, 0x22, 0x33};
