@@ -1,14 +1,30 @@
 #include "swiftrobotc/device.h"
 
-Device::Device(device_info_t device_info, uint16_t port) {
-    client = USBMuxClient();
-    this->info = device_info;
+Device::Device(usb_device_info_t usb_device_info, uint16_t port) {
+    this->client = SocketClient();
+    this->usb_info = usb_device_info;
     this->port = port;
     this->outgoingMessage = NULL;
     this->connectedCallback = NULL;
     this->status = IDLE;
     this->tag = 1;
     this->reconnectThread = std::thread(&Device::connectThread, this);
+    this->usbmux = true;
+}
+
+Device::Device(std::string ip_address, uint16_t port) {
+    this->client = SocketClient();
+    usb_device_info_t usb_info;
+    usb_info.device_id = 0; // when using wifi, only one connection is allowed, therefore deviceID is always 0
+    this->usb_info = usb_info;
+    this->ip_address = ip_address;
+    this->port = port;
+    this->outgoingMessage = NULL;
+    this->connectedCallback = NULL;
+    this->status = IDLE;
+    this->tag = 1;
+    this->reconnectThread = std::thread(&Device::connectThread, this);
+    this->usbmux = false;
 }
 
 Device::~Device() {
@@ -23,20 +39,31 @@ void Device::startConnection() {
 void Device::connect() {
     if (status == WANTING_CONNECTION) {
         client.close();
-        client.open();
-        client.startListening(std::bind(&Device::messageReceived, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
-        
-        // send TCP tunneling request
-        uint16_t port_bigendian = ((port<<8) & 0xFF00) | (port>>8);
-        std::vector<char> packet = Device::createUSBMuxPacket(USBMUX_MESSAGETYPE_CONNECT,
-            {{USBMUX_KEY_DEVICEID,(int)info.device_id},
-            {USBMUX_KEY_PORT, int(port_bigendian)}
-        });
-        if (client.sendPlist(tag, (char*)&packet[0], packet.size()) < 0) {
-            return;
+        if (usbmux) {
+            client.open();
+            client.startListening(std::bind(&Device::messageReceived, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+            // send TCP tunneling request
+            uint16_t port_bigendian = ((port<<8) & 0xFF00) | (port>>8);
+            std::vector<char> packet = Device::createUSBMuxPacket(USBMUX_MESSAGETYPE_CONNECT,
+                {{USBMUX_KEY_DEVICEID,(int)usb_info.device_id},
+                {USBMUX_KEY_PORT, int(port_bigendian)}
+            });
+            if (client.sendPlist(tag, (char*)&packet[0], packet.size()) < 0) {
+                return;
+            }
+            tag++;
+            this->status = CONNECTING;
+            
+        } else {
+            if (client.open(ip_address, port) == 0) {
+                this->status = CONNECTED;
+                if (connectedCallback != NULL) {
+                    connectedCallback(usb_info.device_id,true);
+                }
+            } else {
+                this->status = WANTING_CONNECTION;
+            }
         }
-        tag++;
-        this->status = CONNECTING;
     }
 }
 
@@ -94,7 +121,7 @@ void Device::messageReceived(usbmux_header_t header, char* data, size_t size) {
                 case USBMuxReplyCodeOK: {
                     status = CONNECTED;
                     if (connectedCallback != NULL) {
-                        connectedCallback(info.device_id,true);
+                        connectedCallback(usb_info.device_id,true);
                     }
                     break;
                 }

@@ -19,7 +19,7 @@
 class USBHub {
 private:
     std::map<uint32_t,DevicePtr> devices;
-    USBMuxClient broadcastClient;
+    SocketClient broadcastClient;
     uint16_t port;
     std::function<void(char* data, size_t size)> receivedPacketCallback;
     std::function<void(uint8_t deviceID, uint8_t status)> deviceStatusCallback;
@@ -36,10 +36,10 @@ public:
 private:
     void broadcastHandler(usbmux_header_t header, char*data, size_t size);
     void handleResult(usbmux_reply_code_t reply_code, usbmux_header_t msg_header);
-    void createDevice(device_info_t device, uint16_t port);
+    void createDevice(usb_device_info_t device, uint16_t port);
     void removeDevice(int deviceID);
     
-    static device_info_t parsePropertiesPlistDict(std::map<std::string, boost::any> plist);
+    static usb_device_info_t parsePropertiesPlistDict(std::map<std::string, boost::any> plist);
 };
 
 #endif

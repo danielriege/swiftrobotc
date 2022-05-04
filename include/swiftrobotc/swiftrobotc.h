@@ -9,19 +9,11 @@
 #include "swiftrobotc/usbhub.h"
 #include "swiftrobotc/msgs.h"
 
-#define MAX_DATA_SIZE MTU-8 // 8 is size of previus types in packet
-
-typedef struct swiftrobot_packet {
+typedef struct swiftrobot_packet_header {
     uint16_t channel;
     uint16_t type;
     uint32_t data_size;
-    char data[MAX_DATA_SIZE];
-} swiftrobot_packet_t;
-
-typedef enum ConnectionType {
-    WiFi,
-    USB,
-} ConnectionType;
+} swiftrobot_packet_header_t;
 
 ///
 /// Manages connections to multipleiOS devices. Connections are made automatically. As soon as a connection is established, subscribe events will come in and publish evenets will be sent to device. There is no queue to store messages in case connection is down.
@@ -30,7 +22,8 @@ typedef enum ConnectionType {
 class SwiftRobotClient {
 private:
     uint16_t port;
-    USBHub usbHub;
+    std::unique_ptr<USBHub> usbHubPtr;
+    std::unique_ptr<Device> wifiClientPtr;
     std::map<uint8_t, std::vector<std::any>> subscriber_channel_map; ///< stores subscriber callbacks as any to be free of generic message type
 public:
     ///
@@ -38,8 +31,11 @@ public:
     /// @param connectionType either WiFi or USB
     /// @param port listening port of the process on iOS device
     ///
-    SwiftRobotClient(ConnectionType connectionType, uint16_t port);
+    SwiftRobotClient(uint16_t port); // USBMUX
+    SwiftRobotClient(std::string ip_address, uint16_t port); // WIFI
     ~SwiftRobotClient();
+    
+    void start();
     
     ///
     ///publishes a message. When connection is down, the messages are discared.
@@ -50,20 +46,26 @@ public:
     template<typename M>
     void publish(uint8_t channel, M msg) {
         (void)static_cast<Message*>((M*)0);
-        if (sizeof(msg) > MAX_DATA_SIZE) {
-            printf("Message too long for MTU\n");
-            return;
-        }
-        char byteArray[MAX_DATA_SIZE];
-        uint32_t payload_size = msg.serialize(byteArray);
-        swiftrobot_packet_t packet;
-        packet.channel = channel;
-        packet.type = M::type;
-        packet.data_size = payload_size;
-        memcpy(packet.data, byteArray, payload_size);
+//        if (msg.getSize() > MAX_DATA_SIZE) { // TODO: sizeof does not work
+//            printf("Message too long for MTU\n");
+//            return;
+//        }
+        char packet[msg.getSize()+sizeof(swiftrobot_packet_header_t)]; // 8 is size of packet headers
+        uint32_t payload_size = msg.serialize(packet+sizeof(swiftrobot_packet_header_t)); // copy data into packet array after header
+        swiftrobot_packet_header_t header;
+        header.channel = channel;
+        header.type = M::type;
+        header.data_size = payload_size;
+        memcpy(packet, (char*)&header, sizeof(swiftrobot_packet_header_t));
+        //memcpy(packet.data, byteArray, payload_size);
         
         //messageReceived((char*)&packet, payload_size+8);
-        usbHub.sendPacketToAll((char*)&packet, payload_size+8);
+        if (usbHubPtr) {
+            usbHubPtr->sendPacketToAll(packet, payload_size+sizeof(swiftrobot_packet_header_t));
+        }
+        if (wifiClientPtr) {
+            wifiClientPtr->send(packet, payload_size+sizeof(swiftrobot_packet_header_t));
+        }
     };
     
     ///
@@ -82,7 +84,9 @@ private:
     /// configures USBHub instance by setting recieve callback and starts looking for connections
     ///
     void connectToUSBHub();
+    void connectToWifiServer();
     void disconnectFromUSBHub();
+    void disconnectFromWifiServer();
     
     void messageReceived(char* data, size_t size);
     

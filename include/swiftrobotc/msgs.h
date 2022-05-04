@@ -13,10 +13,13 @@
 #define FLOATARRAY_MSG      0x0007
 // internal_msgs
 #define UPDATE_MSG          0x0101
+// sensor_msgs
+#define IMAGE_MSG           0x0201
 
 struct Message {
     uint32_t serialize(char* data) {}
     static Message deserialize(char* data) {return Message();}
+    uint32_t getSize();
     static const uint16_t type = 0;
 };
 
@@ -41,6 +44,10 @@ struct UInt8Array: Message {
         return msg;
     }
     
+    uint32_t getSize() {
+        return sizeof(uint32_t) + data.size() * sizeof(uint8_t);
+    }
+    
     static const uint16_t type = UINT8ARRAY_MSG;
 };
 
@@ -61,6 +68,10 @@ struct UInt16Array: Message {
         std::vector<uint16_t> data(dat + sizeof(uint32_t), dat + sizeof(uint32_t) + msg.size);
         msg.data = data;
         return msg;
+    }
+    
+    uint32_t getSize() {
+        return sizeof(uint32_t) + data.size() * sizeof(uint16_t);
     }
     
     static const uint16_t type = UINT16ARRAY_MSG;
@@ -85,6 +96,10 @@ struct UInt32Array: Message {
         return msg;
     }
     
+    uint32_t getSize() {
+        return sizeof(uint32_t) + data.size() * sizeof(uint32_t);
+    }
+    
     static const uint16_t type = UINT32ARRAY_MSG;
 };
 
@@ -105,6 +120,10 @@ struct Int8Array: Message {
         std::vector<int8_t> data(dat + sizeof(uint32_t), dat + sizeof(uint32_t) + msg.size);
         msg.data = data;
         return msg;
+    }
+    
+    uint32_t getSize() {
+        return sizeof(uint32_t) + data.size() * sizeof(int8_t);
     }
     
     static const uint16_t type = INT8ARRAY_MSG;
@@ -129,6 +148,10 @@ struct Int16Array: Message {
         return msg;
     }
     
+    uint32_t getSize() {
+        return sizeof(uint32_t) + data.size() * sizeof(int16_t);
+    }
+    
     static const uint16_t type = INT16ARRAY_MSG;
 };
 
@@ -151,6 +174,10 @@ struct Int32Array: Message {
         return msg;
     }
     
+    uint32_t getSize() {
+        return sizeof(uint32_t) + data.size() * sizeof(int32_t);
+    }
+    
     static const uint16_t type = INT32ARRAY_MSG;
 };
 
@@ -171,6 +198,10 @@ struct FloatArray: Message {
         std::vector<float> data(dat + sizeof(uint32_t), dat + sizeof(uint32_t) + msg.size);
         msg.data = data;
         return msg;
+    }
+    
+    uint32_t getSize() {
+        return sizeof(uint32_t) + data.size() * sizeof(float);
     }
     
     static const uint16_t type = FLOATARRAY_MSG;
@@ -204,7 +235,45 @@ struct UpdateMsg: Message {
         return msg;
     }
     
+    uint32_t getSize() {
+        return sizeof(uint8_t) + sizeof(uint8_t);
+    }
+    
     static const uint16_t type = UPDATE_MSG;
+};
+
+}
+
+namespace sensor_msgs {
+
+struct Image: Message {
+    uint16_t width;
+    uint16_t height;
+    char pixelFormat[4];
+    base_msgs::UInt8Array pixelArray;
+    
+    uint32_t serialize(char* dat) {
+        memcpy(dat, &width, sizeof(uint16_t));
+        memcpy(dat + sizeof(uint16_t), &height, sizeof(uint16_t));
+        memcpy(dat + sizeof(uint16_t) + sizeof(uint16_t), &pixelFormat, sizeof(char) * 4);
+        pixelArray.serialize(dat + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(char) * 4);
+        return sizeof(uint16_t) + sizeof(uint16_t) + sizeof(char) * 4 + pixelArray.getSize();
+    }
+    
+    static Image deserialize(char* dat) {
+        Image msg;
+        memcpy(&msg.width, dat, sizeof(uint16_t));
+        memcpy(&msg.height, dat + sizeof(uint16_t), sizeof(uint16_t));
+        memcpy(&msg.pixelFormat, dat + sizeof(uint16_t) + sizeof(uint16_t), sizeof(char) * 4);
+        msg.pixelArray = base_msgs::UInt8Array::deserialize(dat + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(char) * 4);
+        return msg;
+    }
+    
+    uint32_t getSize() {
+        return sizeof(uint16_t) + sizeof(uint16_t) + sizeof(char) * 4 + pixelArray.getSize();
+    }
+    
+    static const uint16_t type = IMAGE_MSG;
 };
 
 }

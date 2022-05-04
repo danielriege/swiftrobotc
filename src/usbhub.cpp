@@ -1,7 +1,7 @@
 #include "swiftrobotc/usbhub.h"
 
 USBHub::USBHub(uint16_t port) {
-    broadcastClient = USBMuxClient();
+    this->broadcastClient = SocketClient();
     this->port = port;
     this->receivedPacketCallback = NULL;
     this->deviceStatusCallback = NULL;
@@ -24,7 +24,7 @@ void USBHub::close() {
     broadcastClient.close();
 }
 
-void USBHub::createDevice(device_info_t device, uint16_t port) {
+void USBHub::createDevice(usb_device_info_t device, uint16_t port) {
     DevicePtr new_device = std::make_shared<Device>(device, port);
     devices[device.device_id] = new_device;
     new_device->startConnection();
@@ -79,7 +79,7 @@ void USBHub::broadcastHandler(usbmux_header_t header, char*data, size_t size) {
             int result_code = (int)boost::any_cast<const int64_t&>(plist_message.find(USBMUX_KEY_NUMBER)->second);
             handleResult((usbmux_reply_code_t)result_code, header);
         } else if (type == USBMUX_MESSAGETYPE_ATTACH) {
-            device_info_t deviceInfo = USBHub::parsePropertiesPlistDict(plist_message);
+            usb_device_info_t deviceInfo = USBHub::parsePropertiesPlistDict(plist_message);
             createDevice(deviceInfo, this->port);
         } else if (type == USBMUX_MESSAGETYPE_DETACH) {
             int device_id = (int)boost::any_cast<const int64_t&>(plist_message.find(USBMUX_KEY_DEVICEID)->second);
@@ -107,9 +107,9 @@ void USBHub::handleResult(usbmux_reply_code_t reply_code, usbmux_header_t msg_he
     }
 }
 
-device_info_t USBHub::parsePropertiesPlistDict(std::map<std::string, boost::any> plist) {
+usb_device_info_t USBHub::parsePropertiesPlistDict(std::map<std::string, boost::any> plist) {
     const std::map<std::string, boost::any>& dict = boost::any_cast<const std::map<std::string, boost::any>&>(plist.find("Properties")->second);
-    device_info_t device_info;
+    usb_device_info_t device_info;
     device_info.device_id = (uint32_t)boost::any_cast<const int64_t&>(dict.find("DeviceID")->second);
     device_info.location_id = (uint32_t)boost::any_cast<const int64_t&>(dict.find("LocationID")->second);
     device_info.product_id = (uint32_t)boost::any_cast<const int64_t&>(dict.find("ProductID")->second);

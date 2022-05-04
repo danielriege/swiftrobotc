@@ -20,7 +20,15 @@
 #include "swiftrobotc/usbhub.h"
 
 int main(int argc, const char * argv[]) {
-    SwiftRobotClient client(USB,2345);
+    SwiftRobotClient client(2345); // usbmux
+    //SwiftRobotClient client("192.168.178.59", 2345); // wifi
+    
+    client.subscribe<internal_msgs::UpdateMsg>(0, [](internal_msgs::UpdateMsg msg) {
+        printf("Device : %d is now: %d\n", msg.deviceID, msg.status);
+    });
+    
+    client.start();
+    
     client.subscribe<base_msgs::UInt32Array>(2, [](base_msgs::UInt32Array msg) {
         printf("uint32 \n");
         for (int i = 0; i < msg.data.size(); i++) {
@@ -28,26 +36,25 @@ int main(int argc, const char * argv[]) {
         }
         printf("\n");
     });
-    client.subscribe<base_msgs::UInt8Array>(1, [](base_msgs::UInt8Array msg) {
-        printf("uint8 \n");
-        for (int i = 0; i < msg.data.size(); i++) {
-            printf("%02x ", (unsigned char)msg.data[i]);
-        }
-        printf("\n");
-    });
-    client.subscribe<internal_msgs::UpdateMsg>(0, [](internal_msgs::UpdateMsg msg) {
-        printf("Device : %d is now: %d\n", msg.deviceID, msg.status);
+    client.subscribe<sensor_msgs::Image>(1, [](sensor_msgs::Image msg) {
+        //printf("image \n");
+       // printf("width: %d height: %d pixelFormat %s \n", msg.width, msg.height, msg.pixelFormat);
     });
     
 //    std::vector<char> data = {0x11, 0x22, 0x33};
-    std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+    std::this_thread::sleep_for(std::chrono::milliseconds(8000));
     
     base_msgs::UInt16Array msg;
-    std::vector<uint16_t> tmp = {0x11, 0x22, 0x33, 0x44, 0xbe, 0xef};
+    std::vector<uint16_t> tmp;
+    for (int i = 0; i< 100000; i++) {
+        tmp.push_back(0x00be);
+    }
     msg.data = tmp;
     client.publish<base_msgs::UInt16Array>(3, msg);
+    printf("sent\n");
     
-    while (1);
+    while(1) {}
+    
     
 //    USBHub hub(2348);
 //    hub.startLookingForConnections();

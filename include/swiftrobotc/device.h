@@ -43,7 +43,7 @@ typedef enum usbmux_reply_code {
     USBMuxReplyCodeBadVersion = 6,
 } usbmux_reply_code_t;
 
-typedef struct device_info {
+typedef struct usb_device_info {
     uint32_t device_id;
     uint32_t location_id;
     uint32_t product_id;
@@ -52,7 +52,7 @@ typedef struct device_info {
     std::string serial_number;
     std::string udid;
     std::string usb_serial_number;
-} device_info_t;
+} usb_device_info_t;
 
 typedef enum device_status {
     IDLE,
@@ -66,18 +66,21 @@ typedef enum device_status {
 ///
 class Device {
 private:
-    USBMuxClient client;
-    device_info_t info;
+    SocketClient client;
+    usb_device_info_t usb_info; // for USB
+    std::string ip_address; // for WiFi
     device_status_t status;
     uint64_t port;
     uint32_t tag;
+    bool usbmux;
     
     std::function<void(char* data, size_t size)> outgoingMessage;
     std::function<void(uint8_t deviceID, uint8_t connected)> connectedCallback;
     std::thread reconnectThread;
     
 public:
-    Device(device_info_t device_info, uint16_t port);
+    Device(usb_device_info_t usb_device_info, uint16_t port); // for USB
+    Device(std::string ip_address, uint16_t port); // for WiFi
     ~Device();
     
     void startConnection();
