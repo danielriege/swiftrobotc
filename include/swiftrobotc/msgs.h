@@ -3,7 +3,7 @@
 
 #define ARRAY_SIZE_SIZE 4
 
-// base_msgs
+// base_msg
 #define UINT8ARRAY_MSG      0x0001
 #define UINT16ARRAY_MSG     0x0002
 #define UINT32ARRAY_MSG     0x0003
@@ -11,9 +11,9 @@
 #define INT16ARRAY_MSG      0x0005
 #define INT32ARRAY_MSG      0x0006
 #define FLOATARRAY_MSG      0x0007
-// internal_msgs
+// internal_msg
 #define UPDATE_MSG          0x0101
-// sensor_msgs
+// sensor_msg
 #define IMAGE_MSG           0x0201
 
 struct Message {
@@ -23,7 +23,7 @@ struct Message {
     static const uint16_t type = 0;
 };
 
-namespace base_msgs{
+namespace base_msg{
 
 struct UInt8Array: Message {
     uint32_t size;
@@ -209,7 +209,7 @@ struct FloatArray: Message {
 
 }
 
-namespace internal_msgs {
+namespace internal_msg {
 
 enum status_t {
     ATTACHED = 0,
@@ -244,13 +244,13 @@ struct UpdateMsg: Message {
 
 }
 
-namespace sensor_msgs {
+namespace sensor_msg {
 
 struct Image: Message {
     uint16_t width;
     uint16_t height;
     char pixelFormat[4];
-    base_msgs::UInt8Array pixelArray;
+    base_msg::UInt8Array pixelArray;
     
     uint32_t serialize(char* dat) {
         memcpy(dat, &width, sizeof(uint16_t));
@@ -265,7 +265,7 @@ struct Image: Message {
         memcpy(&msg.width, dat, sizeof(uint16_t));
         memcpy(&msg.height, dat + sizeof(uint16_t), sizeof(uint16_t));
         memcpy(&msg.pixelFormat, dat + sizeof(uint16_t) + sizeof(uint16_t), sizeof(char) * 4);
-        msg.pixelArray = base_msgs::UInt8Array::deserialize(dat + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(char) * 4);
+        msg.pixelArray = base_msg::UInt8Array::deserialize(dat + sizeof(uint16_t) + sizeof(uint16_t) + sizeof(char) * 4);
         return msg;
     }
     
