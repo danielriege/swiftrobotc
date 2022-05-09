@@ -30,7 +30,7 @@ add_executable(swiftrobotc_test
     ${HEADER}
     ${PLIST_SOURCES}
     ${PLIST_HEADER})
-target_link_libraries(swiftrobotc_test ${Boost_LIBRARIES})
+target_link_libraries(swiftrobotc_test ${Boost_LIBRARIES} ${OpenCV_LIBS})
 target_include_directories(swiftrobotc_test PRIVATE include/ src/Plist/)
 
 install(TARGETS swiftrobotc DESTINATION lib)

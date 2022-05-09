@@ -15,6 +15,7 @@
 #include <thread>
 #include <chrono>
 
+
 #include "swiftrobotc/swiftrobotc.h"
 #include "swiftrobotc/msgs.h"
 #include "swiftrobotc/usbhub.h"
@@ -29,12 +30,8 @@ int main(int argc, const char * argv[]) {
     
     client.start();
     
-    client.subscribe<base_msg::UInt32Array>(2, [](base_msg::UInt32Array msg) {
-        printf("uint32 \n");
-        for (int i = 0; i < msg.data.size(); i++) {
-            printf("%02x ", (unsigned char)msg.data[i]);
-        }
-        printf("\n");
+    client.subscribe<sensor_msg::IMU>(2, [](sensor_msg::IMU msg) {
+        printf("recv imu data\n");
     });
     client.subscribe<sensor_msg::Image>(1, [](sensor_msg::Image msg) {
         //printf("image \n");
