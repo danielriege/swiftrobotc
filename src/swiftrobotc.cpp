@@ -39,6 +39,9 @@ void SwiftRobotClient::messageReceived(char *data, size_t size) {
         case FLOATARRAY_MSG: {notify(receivedHeader->channel, base_msg::FloatArray::deserialize(data+sizeof(swiftrobot_packet_header_t))); break;}
         // sensor_msgs
         case IMAGE_MSG: {notify(receivedHeader->channel, sensor_msg::Image::deserialize(data + sizeof(swiftrobot_packet_header_t))); break;}
+        case IMU_MSG: {notify(receivedHeader->channel, sensor_msg::IMU::deserialize(data + sizeof(swiftrobot_packet_header_t))); break;}
+        // control_msgs
+        case DRIVE_MSG: {notify(receivedHeader->channel, control_msg::Drive::deserialize(data + sizeof(swiftrobot_packet_header_t))); break;}
         default: {
             break;
         }
