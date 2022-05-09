@@ -15,6 +15,9 @@
 #define UPDATE_MSG          0x0101
 // sensor_msg
 #define IMAGE_MSG           0x0201
+#define IMU_MSG             0x0202
+// control_msg
+#define DRIVE_MSG           0x0301
 
 struct Message {
     uint32_t serialize(char* data) {}
@@ -274,6 +277,86 @@ struct Image: Message {
     }
     
     static const uint16_t type = IMAGE_MSG;
+};
+
+struct IMU: Message {
+    float orientationX;
+    float orientationY;
+    float orientationZ;
+    float angularVelocityX;
+    float angularVelocityY;
+    float angularVelocityZ;
+    float linearAccelerationX;
+    float linearAccelerationY;
+    float linearAccelerationZ;
+    
+    uint32_t serialize(char* dat) {
+        memcpy(dat, &orientationX, sizeof(float));
+        memcpy(dat + sizeof(float), &orientationY, sizeof(float));
+        memcpy(dat + 2 * sizeof(float), &orientationZ, sizeof(float));
+        memcpy(dat + 3 * sizeof(float), &angularVelocityX, sizeof(float));
+        memcpy(dat + 4 * sizeof(float), &angularVelocityY, sizeof(float));
+        memcpy(dat + 5 * sizeof(float), &angularVelocityZ, sizeof(float));
+        memcpy(dat + 6 * sizeof(float), &linearAccelerationX, sizeof(float));
+        memcpy(dat + 7 * sizeof(float), &linearAccelerationY, sizeof(float));
+        memcpy(dat + 8 * sizeof(float), &linearAccelerationZ, sizeof(float));
+        return 9 * sizeof(float);
+    }
+    
+    static IMU deserialize(char* dat) {
+        IMU msg;
+        memcpy(&msg.orientationX, dat, sizeof(float));
+        memcpy(&msg.orientationY, dat + sizeof(float), sizeof(float));
+        memcpy(&msg.orientationZ, dat + 2 * sizeof(float), sizeof(float));
+        memcpy(&msg.angularVelocityX, dat + 3 * sizeof(float), sizeof(float));
+        memcpy(&msg.angularVelocityY, dat + 4 * sizeof(float), sizeof(float));
+        memcpy(&msg.angularVelocityZ, dat + 5 * sizeof(float), sizeof(float));
+        memcpy(&msg.linearAccelerationX, dat + 6 * sizeof(float), sizeof(float));
+        memcpy(&msg.linearAccelerationY, dat + 7 * sizeof(float), sizeof(float));
+        memcpy(&msg.linearAccelerationZ, dat + 8 * sizeof(float), sizeof(float));
+        return msg;
+    }
+    
+    uint32_t getSize() {
+        return 9 * sizeof(float);
+    }
+    
+    static const uint16_t type = IMU_MSG;
+};
+
+}
+
+namespace control_msg {
+    
+struct Drive: Message {
+    float throttle;
+    float brake;
+    float steer;
+    uint8_t reverse;
+
+    
+    uint32_t serialize(char* dat) {
+        memcpy(dat, &throttle, sizeof(float));
+        memcpy(dat + sizeof(float), &brake, sizeof(float));
+        memcpy(dat + 2 * sizeof(float), &steer, sizeof(float));
+        memcpy(dat + 3 * sizeof(float), &reverse, sizeof(uint8_t));
+        return 3 * sizeof(float) + sizeof(uint8_t);
+    }
+    
+    static Drive deserialize(char* dat) {
+        Drive msg;
+        memcpy(&msg.throttle, dat, sizeof(float));
+        memcpy(&msg.brake, dat + sizeof(float), sizeof(float));
+        memcpy(&msg.steer, dat + 2 * sizeof(float), sizeof(float));
+        memcpy(&msg.reverse, dat + 3 * sizeof(float), sizeof(uint8_t));
+        return msg;
+    }
+    
+    uint32_t getSize() {
+        return 3 * sizeof(float) + sizeof(uint8_t);
+    }
+    
+    static const uint16_t type = DRIVE_MSG;
 };
 
 }
