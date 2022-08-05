@@ -2,11 +2,11 @@
 #include "Plist.hpp"
 
 SwiftRobotClient::SwiftRobotClient(uint16_t port): port{port} {
-    usbHubPtr = std::make_unique<USBHub>(port);
+    usbHubPtr = std::make_shared<USBHub>(port);
 }
 
 SwiftRobotClient::SwiftRobotClient(std::string ip_address, uint16_t port): port{port} {
-    wifiClientPtr = std::make_unique<Device>(ip_address, port);
+    wifiClientPtr = std::make_shared<Device>(ip_address, port);
 }
 
 SwiftRobotClient::~SwiftRobotClient() {
@@ -42,6 +42,8 @@ void SwiftRobotClient::messageReceived(char *data, size_t size) {
         case IMU_MSG: {notify(receivedHeader->channel, sensor_msg::IMU::deserialize(data + sizeof(swiftrobot_packet_header_t))); break;}
         // control_msgs
         case DRIVE_MSG: {notify(receivedHeader->channel, control_msg::Drive::deserialize(data + sizeof(swiftrobot_packet_header_t))); break;}
+        // nav_msg
+        case ODOMETRY_MSG: {notify(receivedHeader->channel, nav_msg::Odometry::deserialize(data + sizeof(swiftrobot_packet_header_t)));break;}
         default: {
             break;
         }

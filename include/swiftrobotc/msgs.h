@@ -18,6 +18,8 @@
 #define IMU_MSG             0x0202
 // control_msg
 #define DRIVE_MSG           0x0301
+// nav_msg
+#define ODOMETRY_MSG        0x0401
 
 struct Message {
     uint32_t serialize(char* data) {}
@@ -357,6 +359,46 @@ struct Drive: Message {
     }
     
     static const uint16_t type = DRIVE_MSG;
+};
+
+}
+
+namespace nav_msg {
+
+struct Odometry: Message {
+    float positionX;
+    float positionY;
+    float positionZ;
+    float roll;
+    float pitch;
+    float yaw;
+    
+    uint32_t serialize(char* dat) {
+        memcpy(dat, &positionX, sizeof(float));
+        memcpy(dat + sizeof(float), &positionY, sizeof(float));
+        memcpy(dat + 2 * sizeof(float), &positionZ, sizeof(float));
+        memcpy(dat + 3 * sizeof(float), &roll, sizeof(float));
+        memcpy(dat + 4 * sizeof(float), &pitch, sizeof(float));
+        memcpy(dat + 5 * sizeof(float), &yaw, sizeof(float));
+        return 6 * sizeof(float);
+    }
+    
+    static Odometry deserialize(char* dat) {
+        Odometry msg;
+        memcpy(&msg.positionX, dat, sizeof(float));
+        memcpy(&msg.positionY, dat + sizeof(float), sizeof(float));
+        memcpy(&msg.positionZ, dat + 2 * sizeof(float), sizeof(float));
+        memcpy(&msg.roll, dat + 3 * sizeof(float), sizeof(float));
+        memcpy(&msg.pitch, dat + 4 * sizeof(float), sizeof(float));
+        memcpy(&msg.yaw, dat + 5 * sizeof(float), sizeof(float));
+        return msg;
+    }
+    
+    uint32_t getSize() {
+        return 6 * sizeof(float);
+    }
+    
+    static const uint16_t type = ODOMETRY_MSG;
 };
 
 }

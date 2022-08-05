@@ -22,8 +22,8 @@ typedef struct swiftrobot_packet_header {
 class SwiftRobotClient {
 private:
     uint16_t port;
-    std::unique_ptr<USBHub> usbHubPtr;
-    std::unique_ptr<Device> wifiClientPtr;
+    std::shared_ptr<USBHub> usbHubPtr;
+    std::shared_ptr<Device> wifiClientPtr;
     std::map<uint8_t, std::vector<std::any>> subscriber_channel_map; ///< stores subscriber callbacks as any to be free of generic message type
 public:
     ///
@@ -61,10 +61,10 @@ public:
         
         //messageReceived((char*)&packet, payload_size+8);
         if (usbHubPtr) {
-            usbHubPtr->sendPacketToAll(packet, payload_size+sizeof(swiftrobot_packet_header_t));
+            usbHubPtr.get()->sendPacketToAll(packet, payload_size+sizeof(swiftrobot_packet_header_t));
         }
         if (wifiClientPtr) {
-            wifiClientPtr->send(packet, payload_size+sizeof(swiftrobot_packet_header_t));
+            wifiClientPtr.get()->send(packet, payload_size+sizeof(swiftrobot_packet_header_t));
         }
     };
     
