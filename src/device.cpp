@@ -28,7 +28,7 @@ Device::Device(std::string ip_address, uint16_t port) {
 }
 
 Device::~Device() {
-    disconnect();
+    //disconnect();
 }
 
 void Device::startConnection() {

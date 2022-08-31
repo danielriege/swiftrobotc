@@ -40,7 +40,7 @@ void USBHub::createDevice(usb_device_info_t device, uint16_t port) {
 }
 
 void USBHub::removeDevice(int deviceID) {
-    devices.erase(deviceID);
+    devices[deviceID]->disconnect();
     if (deviceStatusCallback != NULL) {
         deviceStatusCallback(deviceID, DEVICE_STATUS_DETACHED);
     }

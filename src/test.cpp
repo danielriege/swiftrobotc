@@ -21,11 +21,11 @@
 #include "swiftrobotc/usbhub.h"
 
 int main(int argc, const char * argv[]) {
-    //SwiftRobotClient client(2345); // usbmux
-    SwiftRobotClient client("192.168.178.59", 2345); // wifi
+    SwiftRobotClient client(2345); // usbmux
+    //SwiftRobotClient client("192.168.178.59", 2345); // wifi
 
     client.subscribe<internal_msg::UpdateMsg>(0, [](internal_msg::UpdateMsg msg) {
-        printf("Device> %d is now: %d", msg.deviceID, msg.status);
+        printf("Device %d is now: %d \n", msg.deviceID, msg.status);
     });
 
     client.start();
@@ -57,7 +57,7 @@ int main(int argc, const char * argv[]) {
         client.publish<sensor_msg::Image>(2, msg);
         printf("sent\n");
 
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
     }
     
     
