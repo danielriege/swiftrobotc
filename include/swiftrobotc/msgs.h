@@ -387,7 +387,7 @@ struct Odometry: Message {
         memcpy(dat + 5 * sizeof(float), &yaw, sizeof(float));
         return 6 * sizeof(float);
     }
-    
+    ODOMETRY_MSG
     static Odometry deserialize(char* dat) {
         Odometry msg;
         memcpy(&msg.positionX, dat, sizeof(float));
