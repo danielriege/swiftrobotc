@@ -20,6 +20,17 @@
 #include "swiftrobotc/msgs.h"
 #include "swiftrobotc/usbhub.h"
 
+static void hexdump(char* buf, int len) {
+    for (int i = 0; i < len; ++i) {
+        if (buf[i] < 0x10)
+            printf(" 0x0");
+        else
+            printf(" 0x");
+        printf("%x", buf[i]);
+    }
+    printf("\n");
+}
+
 int main(int argc, const char * argv[]) {
     SwiftRobotClient client(2345); // usbmux
     //SwiftRobotClient client("192.168.178.59", 2345); // wifi

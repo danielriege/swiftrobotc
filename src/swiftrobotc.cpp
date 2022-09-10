@@ -44,6 +44,8 @@ void SwiftRobotClient::messageReceived(char *data, size_t size) {
         case DRIVE_MSG: {notify(receivedHeader->channel, control_msg::Drive::deserialize(data + sizeof(swiftrobot_packet_header_t))); break;}
         // nav_msg
         case ODOMETRY_MSG: {notify(receivedHeader->channel, nav_msg::Odometry::deserialize(data + sizeof(swiftrobot_packet_header_t)));break;}
+        // state_msg
+        case VESCSTATUS_MSG: {notify(receivedHeader->channel, state_msg::VescStatus::deserialize(data + sizeof(swiftrobot_packet_header_t)));break;}
         default: {
             break;
         }

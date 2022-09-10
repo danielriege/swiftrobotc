@@ -1,6 +1,8 @@
 #ifndef msgs
 #define msgs
 
+#include <stdint.h>
+
 #define ARRAY_SIZE_SIZE 4
 
 // base_msg
@@ -20,6 +22,8 @@
 #define DRIVE_MSG           0x0301
 // nav_msg
 #define ODOMETRY_MSG        0x0401
+// state_msg
+#define VESCSTATUS_MSG      0x0501
 
 struct Message {
     uint32_t serialize(char* data) {}
@@ -185,6 +189,7 @@ struct Int32Array: Message {
     
     static const uint16_t type = INT32ARRAY_MSG;
 };
+    // 0x00 0x00 0x00 0x43 0x0a 0x0ffffffd7 0x23 0x3c 0x00 0x00 0x00 0x00 0x0ffffffbe
 
 struct FloatArray: Message {
     uint32_t size;
@@ -399,6 +404,46 @@ struct Odometry: Message {
     }
     
     static const uint16_t type = ODOMETRY_MSG;
+};
+
+}
+
+namespace state_msg {
+
+struct VescStatus: Message {
+    float mosfet_temp;
+    float motor_temp;
+    int32_t rpm;
+    float battery_voltage;
+    int32_t tachometer;
+    int32_t tachometer_abs;
+    
+    uint32_t serialize(char* dat) {
+        memcpy(dat, &mosfet_temp, sizeof(float));
+        memcpy(dat + sizeof(float), &motor_temp, sizeof(float));
+        memcpy(dat + 2 * sizeof(float), &rpm, sizeof(int32_t));
+        memcpy(dat + 2 * sizeof(float) + sizeof(int32_t), &battery_voltage, sizeof(float));
+        memcpy(dat + 3 * sizeof(float) + sizeof(int32_t), &tachometer, sizeof(int32_t));
+        memcpy(dat + 3 * sizeof(float) + 2 * sizeof(int32_t), &tachometer_abs, sizeof(int32_t));
+        return 3 * sizeof(float) + 3 * sizeof(int32_t);
+    }
+    
+    static VescStatus deserialize(char* dat) {
+        VescStatus msg;
+        memcpy(&msg.mosfet_temp, dat, sizeof(float));
+        memcpy(&msg.motor_temp, dat + sizeof(float), sizeof(float));
+        memcpy(&msg.rpm, dat + 2 * sizeof(float), sizeof(int32_t));
+        memcpy(&msg.battery_voltage, dat + 2 * sizeof(float) + sizeof(int32_t), sizeof(float));
+        memcpy(&msg.tachometer, dat + 3 * sizeof(float) + sizeof(int32_t), sizeof(int32_t));
+        memcpy(&msg.tachometer_abs, dat + 3 * sizeof(float) + 2 * sizeof(int32_t), sizeof(int32_t));
+        return msg;
+    }
+    
+    uint32_t getSize() {
+        return 3 * sizeof(float) + 3 * sizeof(int32_t);
+    }
+    
+    static const uint16_t type = VESCSTATUS_MSG;
 };
 
 }
