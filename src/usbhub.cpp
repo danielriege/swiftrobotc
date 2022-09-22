@@ -1,7 +1,6 @@
 #include "swiftrobotc/usbhub.h"
 
-USBHub::USBHub(uint16_t port) {
-    this->broadcastClient = SocketClient();
+USBHub::USBHub(uint16_t port): broadcastClient{SocketClient()} {
     this->port = port;
     this->receivedPacketCallback = NULL;
     this->deviceStatusCallback = NULL;
@@ -28,10 +27,14 @@ void USBHub::createDevice(usb_device_info_t device, uint16_t port) {
     DevicePtr new_device = std::make_shared<Device>(device, port);
     devices[device.device_id] = new_device;
     new_device->startConnection();
-    new_device->setIncomingCallback(receivedPacketCallback);
-    new_device->setConnectedCallback([this](uint8_t id, uint8_t connected) {
-        if (deviceStatusCallback != NULL && connected == true) {
-            deviceStatusCallback(id, DEVICE_STATUS_CONNECTED);
+    new_device->setPacketReceivedCallback(receivedPacketCallback);
+    new_device->setConnectionStatusCallback([this](uint8_t id, uint8_t connected) {
+        if (deviceStatusCallback != NULL) {
+            if (connected == true) {
+                deviceStatusCallback(id, DEVICE_STATUS_CONNECTED);
+            } else {
+                deviceStatusCallback(id, DEVICE_STATUS_DISCONNECTED);
+            }
         }
     });
     if (deviceStatusCallback != NULL) {
@@ -46,17 +49,30 @@ void USBHub::removeDevice(int deviceID) {
     }
 }
 
-void USBHub::sendPacket(int deviceID, char* data, size_t size) {
-    devices[deviceID]->send(data, size);
+void USBHub::sendPacket(swiftrobot_packet_type_t type, int deviceID, char* data, size_t size) {
+    devices[deviceID]->send(type, data, size);
 }
 
-void USBHub::sendPacketToAll(char* data, size_t size) {
+void USBHub::sendPacketToAll(swiftrobot_packet_type_t type, char* data, size_t size) {
     for ( const auto &device_pair : devices) {
-        device_pair.second->send(data, size);
+        device_pair.second->send(type, data, size);
     }
 }
 
-void USBHub::registerReceiveCallback(std::function<void(char* data, size_t size)> callback) {
+
+void USBHub::send2Packet(swiftrobot_packet_type_t type, int deviceID, char* data1, size_t size1, char* data2, size_t size2) {
+    // like sendPacket()
+    devices[deviceID]->send2(type, data1, size1, data2, size2);
+}
+
+void USBHub::send2PacketToAll(swiftrobot_packet_type_t type, char* data1, size_t size1, char* data2, size_t size2) {
+    // like sendPacketToAll()
+    for ( const auto &device_pair : devices) {
+        device_pair.second->send2(type, data1, size1, data2, size2);
+    }
+}
+
+void USBHub::registerReceiveCallback(std::function<void(swiftrobot_packet_type_t type, char* data, size_t size)> callback) {
     this->receivedPacketCallback = callback;
 }
 
@@ -64,13 +80,13 @@ void USBHub::registerStatusUpdateCallback(std::function<void(uint8_t deviceID, u
     this->deviceStatusCallback = callback;
 }
 
-void USBHub::broadcastHandler(usbmux_header_t header, char*data, size_t size) {
+void USBHub::broadcastHandler(swiftrobot_packet_header_t header, char*data, size_t size) {
     if (header.protocol == USBMuxPacketProtocolPlist) {
         std::map<std::string, boost::any> plist_message;
         try {
             Plist::readPlist(data, size, plist_message);
         } catch (std::exception& e) {
-            printf("swiftrobotc > USBHub: Error within Plist parsing... dont't know what to do other than discarding\n");
+            printf("swiftrobotc: Error within Plist parsing... dont't know what to do other than discarding\n");
             return;
         }
         std::string type = boost::any_cast<const std::string&>(plist_message.find(USBMUX_KEY_MESSAGETYPE)->second);
@@ -87,7 +103,7 @@ void USBHub::broadcastHandler(usbmux_header_t header, char*data, size_t size) {
     }
 }
 
-void USBHub::handleResult(usbmux_reply_code_t reply_code, usbmux_header_t msg_header) {
+void USBHub::handleResult(usbmux_reply_code_t reply_code, swiftrobot_packet_header_t msg_header) {
     switch (reply_code) {
         case USBMuxReplyCodeOK:
             break;

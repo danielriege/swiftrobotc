@@ -1,30 +1,28 @@
 #include "swiftrobotc/device.h"
 
-Device::Device(usb_device_info_t usb_device_info, uint16_t port) {
-    this->client = SocketClient();
+Device::Device(usb_device_info_t usb_device_info, uint16_t port): client{SocketClient()} {
     this->usb_info = usb_device_info;
     this->port = port;
-    this->outgoingMessage = NULL;
-    this->connectedCallback = NULL;
+    this->packetReceivedCallback = NULL;
+    this->connectionStatusCallback = NULL;
     this->status = IDLE;
     this->tag = 1;
-    this->reconnectThread = std::thread(&Device::connectThread, this);
     this->usbmux = true;
+    this->lastKeepAliveRequest = std::chrono::system_clock::now();
 }
 
-Device::Device(std::string ip_address, uint16_t port) {
-    this->client = SocketClient();
+Device::Device(std::string ip_address, uint16_t port): client{SocketClient()} {
     usb_device_info_t usb_info;
     usb_info.device_id = 0; // when using wifi, only one connection is allowed, therefore deviceID is always 0
     this->usb_info = usb_info;
     this->ip_address = ip_address;
     this->port = port;
-    this->outgoingMessage = NULL;
-    this->connectedCallback = NULL;
+    this->packetReceivedCallback = NULL;
+    this->connectionStatusCallback = NULL;
     this->status = IDLE;
     this->tag = 1;
-    this->reconnectThread = std::thread(&Device::connectThread, this);
     this->usbmux = false;
+    this->lastKeepAliveRequest = std::chrono::system_clock::now();
 }
 
 Device::~Device() {
@@ -34,6 +32,7 @@ Device::~Device() {
 void Device::startConnection() {
     status = WANTING_CONNECTION;
     connect();
+    this->reconnectThread = std::thread(&Device::connectThread, this);
 }
 
 void Device::connect() {
@@ -57,9 +56,8 @@ void Device::connect() {
         } else {
             if (client.open(ip_address, port) == 0) {
                 this->status = CONNECTED;
-                if (connectedCallback != NULL) {
-                    connectedCallback(usb_info.device_id,true);
-                }
+                client.startListening(std::bind(&Device::messageReceived, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+                connectRoutine();
             } else {
                 this->status = WANTING_CONNECTION;
             }
@@ -67,18 +65,32 @@ void Device::connect() {
     }
 }
 
+void Device::connectRoutine() {
+    if (connectionStatusCallback != NULL) {
+        connectionStatusCallback(usb_info.device_id,true);
+    }
+    startKeepAliveCheckCycle();
+}
+
 void Device::connectThread() {
     while (status != CONNECTED) {
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
-        connect();
+        if (status != CONNECTED) {
+            connect();
+        }
     }
 }
 
 void Device::disconnect() {
     if (status != IDLE) {
         status = CONNECTED; // to abort reconnecting thread
-        this->reconnectThread.join(); // wait for reconnecting thread to close
+        if (reconnectThread) {
+            this->reconnectThread->join(); // wait for reconnecting thread to close
+        }
         client.close();
+        if (connectionStatusCallback != NULL) {
+            connectionStatusCallback(usb_info.device_id,false);
+        }
     }
     status = IDLE;
 }
@@ -87,30 +99,36 @@ device_status_t Device::getStatus() {
     return status;
 }
 
-void Device::send(char* data, size_t size) {
-    // throw exception when send is not successfull
-    // TODO: put in queue if not connected
+void Device::send(swiftrobot_packet_type_t type, char* data, size_t size) {
     if (status == CONNECTED) {
-        client.send(USBMuxPacketProtocolBinary, USBMuxPacketTypeApplicationData, tag, data, size);
+        client.send(SwiftRobotPacketProtocol, type, tag, data, size);
         tag++;
     }
 }
 
-void Device::setIncomingCallback(std::function<void(char* data, size_t size)> callback) {
-    this->outgoingMessage = callback;
+void Device::send2(swiftrobot_packet_type_t type, char* data1, size_t size1, char* data2, size_t size2) {
+    // like send() but without subscribe request buffering
+    if (status == CONNECTED) {
+        client.send2(SwiftRobotPacketProtocol, type, tag, data1, size1, data2, size2);
+        tag++;
+    }
 }
 
-void Device::setConnectedCallback(std::function<void(uint8_t deviceID, uint8_t connected)> callback) {
-    this->connectedCallback = callback;
+void Device::setPacketReceivedCallback(std::function<void(swiftrobot_packet_type_t type, char* data, size_t size)> callback) {
+    this->packetReceivedCallback = callback;
 }
 
-void Device::messageReceived(usbmux_header_t header, char* data, size_t size) {
+void Device::setConnectionStatusCallback(std::function<void(uint8_t deviceID, uint8_t connected)> callback) {
+    this->connectionStatusCallback = callback;
+}
+
+void Device::messageReceived(swiftrobot_packet_header_t header, char* data, size_t size) {
     if (header.protocol == USBMuxPacketProtocolPlist) {
         std::map<std::string, boost::any> plist_message;
         try {
             Plist::readPlist(data, size, plist_message);
         } catch (std::exception& e) {
-            printf("Device: Error within Plist parsing... dont't know what to do other than discarding\n");
+            printf("swiftrobotc: Error within Plist parsing... dont't know what to do other than discarding\n");
             return;
         }
         std::string type = boost::any_cast<const std::string&>(plist_message.find(USBMUX_KEY_MESSAGETYPE)->second);
@@ -120,9 +138,7 @@ void Device::messageReceived(usbmux_header_t header, char* data, size_t size) {
             switch (result_code) {
                 case USBMuxReplyCodeOK: {
                     status = CONNECTED;
-                    if (connectedCallback != NULL) {
-                        connectedCallback(usb_info.device_id,true);
-                    }
+                    connectRoutine();
                     break;
                 }
                 case USBMuxReplyCodeConnectionRefused: {
@@ -133,11 +149,48 @@ void Device::messageReceived(usbmux_header_t header, char* data, size_t size) {
                     break;
             }
         } else {
-            printf("received a none result message: %s\n", type.c_str());
+            printf("swiftrobotc: received a none result message: %s\n", type.c_str());
         }
-    } else if (header.protocol == USBMuxPacketProtocolBinary) {
-        if (outgoingMessage != NULL) {
-            outgoingMessage(data, size);
+    } else if (header.protocol == SwiftRobotPacketProtocol) {
+        if (header.type == SwiftRobotPacketTypeKeepAliveRequest) {
+            // after we receive a request we answer it and update last keep alive time point
+            lastKeepAliveRequest = std::chrono::system_clock::now();
+            send(SwiftRobotPacketTypeKeepAliveResponse, nullptr, 0);
+        } else {
+            if (packetReceivedCallback != NULL) {
+                packetReceivedCallback((swiftrobot_packet_type_t)header.type, data, size);
+            }
+        }
+    }
+}
+
+// MARK: - keep alive handlng
+
+bool Device::checkKeepAliveTimeout() {
+    if (lastKeepAliveRequest + std::chrono::milliseconds(KEEPALIVE_TIMEOUT) < std::chrono::system_clock::now()) {
+        return false;
+    }
+    return true;
+}
+
+void Device::startKeepAliveCheckCycle() {
+    lastKeepAliveRequest = std::chrono::system_clock::now();
+    if (keepAliveCycleCheckThread) {
+        keepAliveCycleCheckThread->join();
+    }
+    keepAliveCycleCheckThread = std::thread(&Device::checkKeepAliveThread, this);
+}
+
+void Device::checkKeepAliveThread() {
+    while (status == CONNECTED) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(KEEPALIVE_CHECK_TIMER));
+        if (status != CONNECTED) {
+            return;
+        }
+        if (!checkKeepAliveTimeout()) {
+            disconnect();
+            startConnection();
+            return;
         }
     }
 }

@@ -1,9 +1,12 @@
-#include "swiftrobotc/usbmux_client.h"
+#include "swiftrobotc/socket_client.h"
 
-SocketClient::SocketClient() {
+SocketClient::SocketClient() : send_mutex() {
     socket_fd = 0;
 }
 
+///
+/// opens usbmuxd socket
+///
 int SocketClient::open() {
     struct stat fst;
     struct sockaddr_un address;
@@ -26,12 +29,14 @@ int SocketClient::open() {
     }
     
     // prevent SIGPIPE
-//    int on = 1;
-//    if (setsockopt(socket_fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on)) < 0) {
-//        printf("%s: Error %d setting sockop NOSIGPIPE.\n", __PRETTY_FUNCTION__, errno);
-//        return -1;
-//    }
-// does not exist on Linux   
+#ifdef __APPLE__
+    int on = 1;
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on)) < 0) {
+        printf("%s: Error %d setting sockop NOSIGPIPE.\n", __PRETTY_FUNCTION__, errno);
+        return -1;
+    }
+#endif
+    
     address.sun_family = AF_UNIX;
     strncpy(address.sun_path, USBMUXD_SOCKET_ADDRESS, sizeof(address.sun_path));
     address.sun_path[sizeof(address.sun_path) - 1] = 0;
@@ -45,6 +50,9 @@ int SocketClient::open() {
     return 0;
 }
 
+///
+/// opens TCP socket
+///
 int SocketClient::open(std::string ip_address, uint16_t port) {
     struct sockaddr_in address;
     
@@ -55,22 +63,24 @@ int SocketClient::open(std::string ip_address, uint16_t port) {
         return -1;
     }
     // prevent SIGPIPE
-//    int on = 1;
-//    if (setsockopt(socket_fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on)) < 0) {
-//        printf("%s: Error %d setting sockop NOSIGPIPE.\n", __PRETTY_FUNCTION__, errno);
-//        return -1;
-//    }
+#ifdef __APPLE__
+    int on = 1;
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_NOSIGPIPE, &on, sizeof(on)) < 0) {
+        printf("%s: Error %d setting sockop NOSIGPIPE.\n", __PRETTY_FUNCTION__, errno);
+        return -1;
+    }
+#endif
+    
     address.sin_family = AF_INET;
     address.sin_port = htons(port);
     // Convert IPv4 and IPv6 addresses from text to binary
-    // form
     if (::inet_pton(AF_INET, ip_address.c_str(), &address.sin_addr) <= 0) {
         printf("\nInvalid address/ Address not supported \n");
         return -1;
     }
     
     if (connect(socket_fd,(struct sockaddr *) &address,sizeof (address)) < 0) {
-        printf("%s: Error %d connecting to server.\n", __PRETTY_FUNCTION__, errno);
+        // if connect fails we dont need to print anything since it will just try to reconnect periodically
         return -1;
     }
     data_buffer = NULL;
@@ -79,13 +89,19 @@ int SocketClient::open(std::string ip_address, uint16_t port) {
 }
 
 int SocketClient::close() {
+    send_mutex.lock();
     if (shutdown(socket_fd, SHUT_RDWR) < 0) {
+        send_mutex.unlock();
         return -1;
     }
+    send_mutex.unlock();
     if (listeningThread) {
         listeningThread->join();
+        listeningThread.reset();
     }
+    send_mutex.lock();
     ::close(socket_fd);
+    send_mutex.unlock();
     if (data_buffer != NULL) {
         free(data_buffer);
         data_buffer = NULL;
@@ -94,36 +110,51 @@ int SocketClient::close() {
     return 0;
 }
 
-int SocketClient::send(usbmux_packet_protocol_t protocol, usbmux_packet_type_t type, int tag, char* data, size_t size) {
-//    if (size > DATA_MTU) {
-//        errno = EMSGSIZE;
-//        return -1;
-//    }
-    usbmux_header_t header;
+int SocketClient::send(swiftrobot_packet_protocol_t protocol, swiftrobot_packet_type_t type, int tag, char* data, size_t size) {
+    swiftrobot_packet_header_t header;
     header.type = type;
     header.protocol = protocol;
-    header.length = sizeof(usbmux_header_t) + size;
-    usbmux_packet_t packet;
-    packet.header = header;
-    //memcpy(packet.payload, data, size);
-    packet.payload = data;
-    char sendBuffer[header.length];
-    memcpy(sendBuffer, (char*)&packet, sizeof(usbmux_header_t));
-    memcpy(&sendBuffer[sizeof(usbmux_header_t)], packet.payload, size);
-    return ::send(socket_fd, sendBuffer, header.length, 0);
+    header.length = sizeof(swiftrobot_packet_header_t) + size;
+    send_mutex.lock();
+    size_t nwritten = 0;
+    nwritten += ::send(socket_fd, &header, sizeof(swiftrobot_packet_header_t), 0);
+    if (size > 0) {
+        nwritten += ::send(socket_fd, data, size, 0);
+    }
+    send_mutex.unlock();
+    return nwritten;
+}
+
+int SocketClient::send2(swiftrobot_packet_protocol_t protocol, swiftrobot_packet_type_t type, int tag, char* data1, size_t size1, char* data2, size_t size2) {
+    swiftrobot_packet_header_t header;
+    header.type = type;
+    header.protocol = protocol;
+    header.length = sizeof(swiftrobot_packet_header_t) + size1 + size2;
+    // in total we send 3 buffer so create a iovec buffer
+    send_mutex.lock();
+    size_t nwritten = 0;
+    nwritten = nwritten + ::send(socket_fd, &header, sizeof(swiftrobot_packet_header_t), 0);
+    if (size1 > 0) {
+        nwritten = nwritten + ::send(socket_fd, data1, size1, 0);
+    }
+    if (size2 > 0) {
+        nwritten = nwritten + ::send(socket_fd, data2, size2, 0);
+    }
+    send_mutex.unlock();
+    return nwritten;
 }
 
 int SocketClient::sendPlist(int tag, char* plist, size_t size) {
     return send(USBMuxPacketProtocolPlist, USBMuxPacketTypePlistPayload, tag, plist, size);
 }
 
-size_t SocketClient::recieveMessageSize() {
+size_t SocketClient::recieveMessageSize(char* data, size_t sizeToRecieve) {
     // read only length
-    size_t receivedSize = recv(socket_fd, buffer, 4, 0);
+    size_t receivedSize = recv(socket_fd, data, sizeToRecieve, 0);
     if (receivedSize <= 0) {
         return receivedSize;
     } else if (receivedSize != 4) {
-        return -1;
+        return recieveMessageSize(data + receivedSize, 4-receivedSize);
     } else {
         return byteArrayToUInt32(buffer);
     }
@@ -144,46 +175,10 @@ int SocketClient::listen(char* data, size_t size) {
     }
 }
 
-
-//int USBMuxClient::listen(usbmux_header_t* header, char* data, size_t size) {
-//    size_t receivedSize = recv(socket_fd, buffer, MTU, 0);
-//    if (receivedSize <= 0) {
-//        return receivedSize;
-//    }
-//    // at beginning of every message, there is always a header
-//    usbmux_packet_t* receivedPacket = (usbmux_packet_t*)buffer;
-//    *header = receivedPacket->header;
-//    // weird behaviour: sometimes the packet is split into two messages, sometimes not...
-//    // catch that
-//    if (receivedSize == sizeof(usbmux_header_t)) {
-//        // message was split but everything under control, we got the header right
-//        // just need to receive again
-//        size_t part2_size = recv(socket_fd, buffer, DATA_MTU, 0);
-//        if (part2_size == header->length - receivedSize) {
-//            // we got exactly the remaining part
-//            memcpy(data, buffer, header->length - receivedSize);
-//        } else {
-//            // something wrong, idc anymore
-//            // use errno from
-//            return -1;
-//        }
-//    } else if (receivedSize == header -> length) {
-//        // message was not split
-//        // payload was written into packet, so we can just copy payload from there
-//        memcpy(data, receivedPacket->payload, receivedSize - sizeof(usbmux_header_t));
-//    } else {
-//        // something even weirder happened...
-//        errno = EMSGSIZE; // message too long, maybe something else suits better
-//        return -1;
-//    }
-//    // sorry for the many if statements
-//    return header->length - sizeof(usbmux_header_t); // we can guarantee that we received that many bytes for the payload
-//}
-
-void SocketClient::listenLoop(std::function<void(usbmux_header_t header, char* data, size_t size)> callback) {
+void SocketClient::listenLoop(std::function<void(swiftrobot_packet_header_t header, char* data, size_t size)> callback) {
     while (1) {
-        usbmux_header_t tmp_header;
-        size_t data_size = recieveMessageSize();
+        swiftrobot_packet_header_t tmp_header;
+        size_t data_size = recieveMessageSize(buffer);
         if (data_size < 4) {
             break;
         }
@@ -213,7 +208,10 @@ void SocketClient::listenLoop(std::function<void(usbmux_header_t header, char* d
     }
 }
 
-int SocketClient::startListening(std::function<void(usbmux_header_t header, char* data, size_t size)> callback) {
+int SocketClient::startListening(std::function<void(swiftrobot_packet_header_t header, char* data, size_t size)> callback) {
+    if (listeningThread) {
+        listeningThread->join();
+    }
     listeningThread = std::thread(&SocketClient::listenLoop, this, callback);
 }
 
