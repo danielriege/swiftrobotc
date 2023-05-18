@@ -1,6 +1,6 @@
-#include "swiftrobotc/device.h"
+#include "swiftrobotc/connection.h"
 
-Device::Device(usb_device_info_t usb_device_info, uint16_t port): client{SocketClient()} {
+Connection::Connection(usb_device_info_t usb_device_info, uint16_t port, DispatchQueuePtr queue): client{SocketClient()}, queue{queue} {
     this->usb_info = usb_device_info;
     this->port = port;
     this->packetReceivedCallback = NULL;
@@ -8,10 +8,9 @@ Device::Device(usb_device_info_t usb_device_info, uint16_t port): client{SocketC
     this->status = IDLE;
     this->tag = 1;
     this->usbmux = true;
-    this->lastKeepAliveRequest = std::chrono::system_clock::now();
 }
 
-Device::Device(std::string ip_address, uint16_t port): client{SocketClient()} {
+Connection::Connection(std::string name, std::string ip_address, uint16_t port, DispatchQueuePtr queue): client{SocketClient()}, name{name}, queue{queue} {
     usb_device_info_t usb_info;
     usb_info.device_id = 0; // when using wifi, only one connection is allowed, therefore deviceID is always 0
     this->usb_info = usb_info;
@@ -22,28 +21,27 @@ Device::Device(std::string ip_address, uint16_t port): client{SocketClient()} {
     this->status = IDLE;
     this->tag = 1;
     this->usbmux = false;
-    this->lastKeepAliveRequest = std::chrono::system_clock::now();
 }
 
-Device::~Device() {
+Connection::~Connection() {
     //disconnect();
 }
 
-void Device::startConnection() {
+void Connection::startConnection() {
     status = WANTING_CONNECTION;
     connect();
-    this->reconnectThread = std::thread(&Device::connectThread, this);
+    //this->reconnectThread = std::thread(&Connection::connectThread, this);
 }
 
-void Device::connect() {
+void Connection::connect() {
     if (status == WANTING_CONNECTION) {
         client.close();
         if (usbmux) {
             client.open();
-            client.startListening(std::bind(&Device::messageReceived, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+            client.startListening(std::bind(&Connection::messageReceived, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
             // send TCP tunneling request
             uint16_t port_bigendian = ((port<<8) & 0xFF00) | (port>>8);
-            std::vector<char> packet = Device::createUSBMuxPacket(USBMUX_MESSAGETYPE_CONNECT,
+            std::vector<char> packet = Connection::createUSBMuxPacket(USBMUX_MESSAGETYPE_CONNECT,
                 {{USBMUX_KEY_DEVICEID,(int)usb_info.device_id},
                 {USBMUX_KEY_PORT, int(port_bigendian)}
             });
@@ -56,8 +54,8 @@ void Device::connect() {
         } else {
             if (client.open(ip_address, port) == 0) {
                 this->status = CONNECTED;
-                client.startListening(std::bind(&Device::messageReceived, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
-                connectRoutine();
+                client.startListening(std::bind(&Connection::messageReceived, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+                connectedRoutine();
             } else {
                 this->status = WANTING_CONNECTION;
             }
@@ -65,14 +63,13 @@ void Device::connect() {
     }
 }
 
-void Device::connectRoutine() {
+void Connection::connectedRoutine() {
     if (connectionStatusCallback != NULL) {
-        connectionStatusCallback(usb_info.device_id,true);
+        connectionStatusCallback(name,true);
     }
-    startKeepAliveCheckCycle();
 }
 
-void Device::connectThread() {
+void Connection::connectThread() {
     while (status != CONNECTED) {
         std::this_thread::sleep_for(std::chrono::milliseconds(2000));
         if (status != CONNECTED) {
@@ -81,48 +78,51 @@ void Device::connectThread() {
     }
 }
 
-void Device::disconnect() {
+void Connection::disconnect() {
     if (status != IDLE) {
         status = CONNECTED; // to abort reconnecting thread
-        if (reconnectThread) {
-            this->reconnectThread->join(); // wait for reconnecting thread to close
-        }
+//        if (reconnectThread) {
+//            this->reconnectThread->join(); // wait for reconnecting thread to close
+//        }
         client.close();
         if (connectionStatusCallback != NULL) {
-            connectionStatusCallback(usb_info.device_id,false);
+            connectionStatusCallback(name,false);
         }
     }
     status = IDLE;
 }
 
-device_status_t Device::getStatus() {
+connection_status_t Connection::getStatus() {
     return status;
 }
 
-void Device::send(swiftrobot_packet_type_t type, char* data, size_t size) {
+std::string Connection::getName() {
+    return name;
+}
+
+void Connection::send(swiftrobot_packet_type_t type, char* data, size_t size) {
     if (status == CONNECTED) {
         client.send(SwiftRobotPacketProtocol, type, tag, data, size);
         tag++;
     }
 }
 
-void Device::send2(swiftrobot_packet_type_t type, char* data1, size_t size1, char* data2, size_t size2) {
-    // like send() but without subscribe request buffering
+void Connection::send2(swiftrobot_packet_type_t type, char* data1, size_t size1, char* data2, size_t size2) {
     if (status == CONNECTED) {
         client.send2(SwiftRobotPacketProtocol, type, tag, data1, size1, data2, size2);
         tag++;
     }
 }
 
-void Device::setPacketReceivedCallback(std::function<void(swiftrobot_packet_type_t type, char* data, size_t size)> callback) {
+void Connection::setPacketReceivedCallback(std::function<void(std::string name, swiftrobot_packet_type_t type, char* data, size_t size)> callback) {
     this->packetReceivedCallback = callback;
 }
 
-void Device::setConnectionStatusCallback(std::function<void(uint8_t deviceID, uint8_t connected)> callback) {
+void Connection::setConnectionStatusCallback(std::function<void(std::string name, uint8_t connected)> callback) {
     this->connectionStatusCallback = callback;
 }
 
-void Device::messageReceived(swiftrobot_packet_header_t header, char* data, size_t size) {
+void Connection::messageReceived(swiftrobot_packet_header_t header, char* data, size_t size) {
     if (header.protocol == USBMuxPacketProtocolPlist) {
         std::map<std::string, boost::any> plist_message;
         try {
@@ -138,7 +138,7 @@ void Device::messageReceived(swiftrobot_packet_header_t header, char* data, size
             switch (result_code) {
                 case USBMuxReplyCodeOK: {
                     status = CONNECTED;
-                    connectRoutine();
+                    connectedRoutine();
                     break;
                 }
                 case USBMuxReplyCodeConnectionRefused: {
@@ -152,50 +152,47 @@ void Device::messageReceived(swiftrobot_packet_header_t header, char* data, size
             printf("swiftrobotc: received a none result message: %s\n", type.c_str());
         }
     } else if (header.protocol == SwiftRobotPacketProtocol) {
-        if (header.type == SwiftRobotPacketTypeKeepAliveRequest) {
-            // after we receive a request we answer it and update last keep alive time point
-            lastKeepAliveRequest = std::chrono::system_clock::now();
-            send(SwiftRobotPacketTypeKeepAliveResponse, nullptr, 0);
-        } else {
-            if (packetReceivedCallback != NULL) {
-                packetReceivedCallback((swiftrobot_packet_type_t)header.type, data, size);
-            }
+        if (header.type == SwiftRobotPacketTypeConnect || header.type == SwiftRobotPacketTypeConnectAck) {
+            this->name = std::string(data);
+        }
+        if (packetReceivedCallback != NULL) {
+            packetReceivedCallback(name, (swiftrobot_packet_type_t)header.type, data, size);
         }
     }
 }
 
 // MARK: - keep alive handlng
 
-bool Device::checkKeepAliveTimeout() {
-    if (lastKeepAliveRequest + std::chrono::milliseconds(KEEPALIVE_TIMEOUT) < std::chrono::system_clock::now()) {
-        return false;
-    }
-    return true;
-}
+//bool Connection::checkKeepAliveTimeout() {
+//    if (lastKeepAliveRequest + std::chrono::milliseconds(KEEPALIVE_TIMEOUT) < std::chrono::system_clock::now()) {
+//        return false;
+//    }
+//    return true;
+//}
+//
+//void Connection::startKeepAliveCheckCycle() {
+//    lastKeepAliveRequest = std::chrono::system_clock::now();
+//    if (keepAliveCycleCheckThread) {
+//        keepAliveCycleCheckThread->join();
+//    }
+//    keepAliveCycleCheckThread = std::thread(&Connection::checkKeepAliveThread, this);
+//}
 
-void Device::startKeepAliveCheckCycle() {
-    lastKeepAliveRequest = std::chrono::system_clock::now();
-    if (keepAliveCycleCheckThread) {
-        keepAliveCycleCheckThread->join();
-    }
-    keepAliveCycleCheckThread = std::thread(&Device::checkKeepAliveThread, this);
-}
+//void Connection::checkKeepAliveThread() {
+//    while (status == CONNECTED) {
+//        std::this_thread::sleep_for(std::chrono::milliseconds(KEEPALIVE_CHECK_TIMER));
+//        if (status != CONNECTED) {
+//            return;
+//        }
+//        if (!checkKeepAliveTimeout()) {
+//            disconnect();
+//            startConnection();
+//            return;
+//        }
+//    }
+//}
 
-void Device::checkKeepAliveThread() {
-    while (status == CONNECTED) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(KEEPALIVE_CHECK_TIMER));
-        if (status != CONNECTED) {
-            return;
-        }
-        if (!checkKeepAliveTimeout()) {
-            disconnect();
-            startConnection();
-            return;
-        }
-    }
-}
-
-std::vector<char> Device::createUSBMuxPacket(std::string message_type, std::map<std::string, boost::any> additionalPayload) {
+std::vector<char> Connection::createUSBMuxPacket(std::string message_type, std::map<std::string, boost::any> additionalPayload) {
     std::map<std::string, boost::any> packet_dict;
     packet_dict[USBMUX_KEY_CLIENTNAME] = std::string(USBMUX_CLIENTNAME);
     packet_dict[USBMUX_KEY_CLIENTVERSION] = std::string(USBMUX_CLIENTVERSION);
@@ -208,6 +205,6 @@ std::vector<char> Device::createUSBMuxPacket(std::string message_type, std::map<
     return packet;
 }
 
-std::vector<char> Device::createUSBMuxPacket(std::string message_type) {
+std::vector<char> Connection::createUSBMuxPacket(std::string message_type) {
     return createUSBMuxPacket(message_type, std::map<std::string, boost::any>());
 }

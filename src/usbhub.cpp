@@ -1,6 +1,6 @@
 #include "swiftrobotc/usbhub.h"
 
-USBHub::USBHub(uint16_t port): broadcastClient{SocketClient()} {
+USBHub::USBHub(uint16_t port, DispatchQueuePtr queue): broadcastClient{SocketClient()}, queue{queue} {
     this->port = port;
     this->receivedPacketCallback = NULL;
     this->deviceStatusCallback = NULL;
@@ -10,7 +10,7 @@ void USBHub::startLookingForConnections() {
     broadcastClient.open();
     broadcastClient.startListening(std::bind(&USBHub::broadcastHandler, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
     
-    std::vector<char> packet = Device::createUSBMuxPacket(USBMUX_MESSAGETYPE_LISTEN);
+    std::vector<char> packet = Connection::createUSBMuxPacket(USBMUX_MESSAGETYPE_LISTEN);
     if (broadcastClient.sendPlist(USBMUX_TAG_BROADCAST, (char*)&packet[0], packet.size()) < 0) {
         return;
     }
@@ -24,16 +24,16 @@ void USBHub::close() {
 }
 
 void USBHub::createDevice(usb_device_info_t device, uint16_t port) {
-    DevicePtr new_device = std::make_shared<Device>(device, port);
+    ConnectionPtr new_device = std::make_shared<Connection>(device, port, queue);
     devices[device.device_id] = new_device;
     new_device->startConnection();
     new_device->setPacketReceivedCallback(receivedPacketCallback);
-    new_device->setConnectionStatusCallback([this](uint8_t id, uint8_t connected) {
+    new_device->setConnectionStatusCallback([&](std::string clientid, uint8_t connected) {
         if (deviceStatusCallback != NULL) {
             if (connected == true) {
-                deviceStatusCallback(id, DEVICE_STATUS_CONNECTED);
+                deviceStatusCallback(device.device_id, DEVICE_STATUS_CONNECTED);
             } else {
-                deviceStatusCallback(id, DEVICE_STATUS_DISCONNECTED);
+                deviceStatusCallback(device.device_id, DEVICE_STATUS_DISCONNECTED);
             }
         }
     });
@@ -49,6 +49,13 @@ void USBHub::removeDevice(int deviceID) {
     }
 }
 
+void USBHub::sendPacket(swiftrobot_packet_type_t type, std::string clientID, char* data, size_t size) {
+    int deviceID = getDeviceIDForClientID(clientID);
+    if (deviceID >= 0) {
+        sendPacket(type, deviceID, data, size);
+    }
+}
+
 void USBHub::sendPacket(swiftrobot_packet_type_t type, int deviceID, char* data, size_t size) {
     devices[deviceID]->send(type, data, size);
 }
@@ -60,9 +67,12 @@ void USBHub::sendPacketToAll(swiftrobot_packet_type_t type, char* data, size_t s
 }
 
 
-void USBHub::send2Packet(swiftrobot_packet_type_t type, int deviceID, char* data1, size_t size1, char* data2, size_t size2) {
+void USBHub::send2Packet(swiftrobot_packet_type_t type, std::string clientID, char* data1, size_t size1, char* data2, size_t size2) {
     // like sendPacket()
-    devices[deviceID]->send2(type, data1, size1, data2, size2);
+    int deviceID = getDeviceIDForClientID(clientID);
+    if (deviceID >= 0) {
+        devices[deviceID]->send2(type, data1, size1, data2, size2);
+    }
 }
 
 void USBHub::send2PacketToAll(swiftrobot_packet_type_t type, char* data1, size_t size1, char* data2, size_t size2) {
@@ -72,11 +82,11 @@ void USBHub::send2PacketToAll(swiftrobot_packet_type_t type, char* data1, size_t
     }
 }
 
-void USBHub::registerReceiveCallback(std::function<void(swiftrobot_packet_type_t type, char* data, size_t size)> callback) {
+void USBHub::registerReceiveCallback(std::function<void(std::string clientID, swiftrobot_packet_type_t type, char* data, size_t size)> callback) {
     this->receivedPacketCallback = callback;
 }
 
-void USBHub::registerStatusUpdateCallback(std::function<void(uint8_t deviceID, uint8_t status)> callback) {
+void USBHub::registerStatusUpdateCallback(std::function<void(int deviceID, uint8_t status)> callback) {
     this->deviceStatusCallback = callback;
 }
 
@@ -135,4 +145,13 @@ usb_device_info_t USBHub::parsePropertiesPlistDict(std::map<std::string, boost::
     //device_info.udid = boost::any_cast<const std::string&>(dict.find("UDID")->second);
     //device_info.usb_serial_number = boost::any_cast<const std::string&>(dict.find("USBSerialNumber")->second);
     return device_info;
+}
+
+int USBHub::getDeviceIDForClientID(std::string clientid) {
+    for (auto const& [deviceID, connection_ptr]: devices) {
+        if (connection_ptr->getName() == clientid) {
+            return deviceID;
+        }
+    }
+    return -1;
 }

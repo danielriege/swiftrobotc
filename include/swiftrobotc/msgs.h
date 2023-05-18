@@ -2,6 +2,7 @@
 #define msgs
 
 #include <stdint.h>
+#include <map>
 
 #define ARRAY_SIZE_SIZE 4
 
@@ -70,8 +71,8 @@ struct UInt16Array: Message {
     static UInt16Array deserialize(char* dat) {
         UInt16Array msg;
         memcpy(&msg.size, dat, sizeof(uint32_t));
-        std::vector<uint16_t> data(dat + sizeof(uint32_t), dat + sizeof(uint32_t) + msg.size);
-        msg.data = data;
+        msg.data = std::vector<uint16_t>(msg.size/sizeof(uint32_t));
+        memcpy(&msg.data[0], dat+sizeof(uint32_t), msg.size);
         return msg;
     }
     
@@ -95,8 +96,8 @@ struct UInt32Array: Message {
     static UInt32Array deserialize(char* dat) {
         UInt32Array msg;
         memcpy(&msg.size, dat, sizeof(uint32_t));
-        std::vector<uint32_t> data(dat + sizeof(uint32_t), dat + sizeof(uint32_t) + msg.size);
-        msg.data = data;
+        msg.data = std::vector<uint32_t>(msg.size/sizeof(uint32_t));
+        memcpy(&msg.data[0], dat+sizeof(uint32_t), msg.size);
         return msg;
     }
     
@@ -120,8 +121,8 @@ struct Int8Array: Message {
     static Int8Array deserialize(char* dat) {
         Int8Array msg;
         memcpy(&msg.size, dat, sizeof(uint32_t));
-        std::vector<int8_t> data(dat + sizeof(uint32_t), dat + sizeof(uint32_t) + msg.size);
-        msg.data = data;
+        msg.data = std::vector<int8_t>(msg.size/sizeof(uint32_t));
+        memcpy(&msg.data[0], dat+sizeof(uint32_t), msg.size);
         return msg;
     }
     
@@ -145,8 +146,8 @@ struct Int16Array: Message {
     static Int16Array deserialize(char* dat) {
         Int16Array msg;
         memcpy(&msg.size, dat, sizeof(uint32_t));
-        std::vector<int16_t> data(dat + sizeof(uint32_t), dat + sizeof(uint32_t) + msg.size);
-        msg.data = data;
+        msg.data = std::vector<int16_t>(msg.size/sizeof(uint32_t));
+        memcpy(&msg.data[0], dat+sizeof(uint32_t), msg.size);
         return msg;
     }
     
@@ -170,8 +171,8 @@ struct Int32Array: Message {
     static Int32Array deserialize(char* dat) {
         Int32Array msg;
         memcpy(&msg.size, dat, sizeof(uint32_t));
-        std::vector<int32_t> data(dat + sizeof(uint32_t), dat + sizeof(uint32_t) + msg.size);
-        msg.data = data;
+        msg.data = std::vector<int32_t>(msg.size/sizeof(uint32_t));
+        memcpy(&msg.data[0], dat+sizeof(uint32_t), msg.size);
         return msg;
     }
     
@@ -196,8 +197,8 @@ struct FloatArray: Message {
     static FloatArray deserialize(char* dat) {
         FloatArray msg;
         memcpy(&msg.size, dat, sizeof(uint32_t));
-        std::vector<float> data(dat + sizeof(uint32_t), dat + sizeof(uint32_t) + msg.size);
-        msg.data = data;
+        msg.data = std::vector<float>(msg.size/sizeof(uint32_t));
+        memcpy(&msg.data[0], dat+sizeof(uint32_t), msg.size);
         return msg;
     }
     
@@ -221,23 +222,24 @@ enum status_t {
 
 struct UpdateMsg: Message {
     
-    uint8_t deviceID;
+    std::string clientID;
     enum status_t status;
     
     void serialize(char* dat) {
-        memcpy(dat, &deviceID, sizeof(uint8_t));
+        memcpy(dat, clientID.c_str(), clientID.size() + 1);
         memcpy(dat + sizeof(uint8_t), &status, sizeof(uint8_t));
     }
     
     static UpdateMsg deserialize(char* dat) {
         UpdateMsg msg;
-        msg.deviceID = (uint8_t)dat[0];
-        msg.status = (enum status_t)dat[1];
+        msg.clientID = std::string(dat);
+        std::size_t string_length = std::strlen(dat);
+        msg.status = (enum status_t)dat[string_length + 1];
         return msg;
     }
     
     uint32_t getSize() {
-        return sizeof(uint8_t) + sizeof(uint8_t);
+        return clientID.length() + 1 + sizeof(uint8_t);
     }
     
     static const uint16_t type = UPDATE_MSG;

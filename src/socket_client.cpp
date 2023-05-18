@@ -110,11 +110,11 @@ int SocketClient::close() {
     return 0;
 }
 
-int SocketClient::send(swiftrobot_packet_protocol_t protocol, swiftrobot_packet_type_t type, int tag, char* data, size_t size) {
+size_t SocketClient::send(swiftrobot_packet_protocol_t protocol, swiftrobot_packet_type_t type, int tag, char* data, size_t size) {
     swiftrobot_packet_header_t header;
     header.type = type;
     header.protocol = protocol;
-    header.length = sizeof(swiftrobot_packet_header_t) + size;
+    header.length = (uint32_t)(sizeof(swiftrobot_packet_header_t) + size);
     send_mutex.lock();
     size_t nwritten = 0;
     nwritten += ::send(socket_fd, &header, sizeof(swiftrobot_packet_header_t), 0);
@@ -125,11 +125,11 @@ int SocketClient::send(swiftrobot_packet_protocol_t protocol, swiftrobot_packet_
     return nwritten;
 }
 
-int SocketClient::send2(swiftrobot_packet_protocol_t protocol, swiftrobot_packet_type_t type, int tag, char* data1, size_t size1, char* data2, size_t size2) {
+size_t SocketClient::send2(swiftrobot_packet_protocol_t protocol, swiftrobot_packet_type_t type, int tag, char* data1, size_t size1, char* data2, size_t size2) {
     swiftrobot_packet_header_t header;
     header.type = type;
     header.protocol = protocol;
-    header.length = sizeof(swiftrobot_packet_header_t) + size1 + size2;
+    header.length = (uint32_t)(sizeof(swiftrobot_packet_header_t) + size1 + size2);
     // in total we send 3 buffer so create a iovec buffer
     send_mutex.lock();
     size_t nwritten = 0;
@@ -144,7 +144,7 @@ int SocketClient::send2(swiftrobot_packet_protocol_t protocol, swiftrobot_packet
     return nwritten;
 }
 
-int SocketClient::sendPlist(int tag, char* plist, size_t size) {
+size_t SocketClient::sendPlist(int tag, char* plist, size_t size) {
     return send(USBMuxPacketProtocolPlist, USBMuxPacketTypePlistPayload, tag, plist, size);
 }
 
@@ -160,7 +160,7 @@ size_t SocketClient::recieveMessageSize(char* data, size_t sizeToRecieve) {
     }
 }
 
-int SocketClient::listen(char* data, size_t size) {
+size_t SocketClient::listen(char* data, size_t size) {
     // recursiv method to make sure everything is received
     size_t receivedSize = recv(socket_fd, data, size, 0);
     if (receivedSize <= 0) {
@@ -191,7 +191,7 @@ void SocketClient::listenLoop(std::function<void(swiftrobot_packet_header_t head
             }
             
             data_buffer = (char*)malloc(data_size-4);
-            data_buffer_capacity = data_size-4;
+            data_buffer_capacity = (uint32_t)data_size-4;
         }
         //char data[data_size-4]; // -4 because we already have the length which is part of a usbmux message
         
@@ -200,7 +200,7 @@ void SocketClient::listenLoop(std::function<void(swiftrobot_packet_header_t head
             break;
         }
         // load into tmp_header
-        tmp_header.length = data_size;
+        tmp_header.length = (uint32_t)data_size;
         tmp_header.protocol = byteArrayToUInt32(data_buffer);
         tmp_header.type = byteArrayToUInt32(data_buffer+4);
         tmp_header.tag = byteArrayToUInt32(data_buffer+8);

@@ -4,45 +4,44 @@
 #include <stdlib.h>
 #include <string.h>
 #include <iomanip>
+#include <vector>
+#include <map>
 #include <any>
+#include <chrono>
+#include <semaphore>
 
-#include "swiftrobotc/usbhub.h"
 #include "swiftrobotc/msgs.h"
+#include "swiftrobotc/client_dispatcher.h"
+#include "swiftrobotc/dispatch_queue.h"
 
-// These headers are used for application level packets like messages, keep alive etc.
-
-typedef struct message_packet_header {
-    uint16_t channel;
-    uint16_t type;
-    uint32_t data_size;
-} message_packet_header_t;
-
-typedef struct subscribe_request_packet_header {
-    uint16_t channel;
-} subscribe_request_packet_header_t;
+#define SUBSCRIBER_DISPATCH_QUEUE_THEARDS 6
 
 ///
 /// Manages connections to multipleiOS devices. Connections are made automatically. As soon as a connection is established, subscribe events will come in and publish evenets will be sent to device. There is no queue to store messages in case connection is down.
 /// The status of connected devices is published on channel 0 with UpdateMsg type.
 ///
 class SwiftRobotClient {
+    
+    struct Subscriber {
+        std::any callback;
+        std::binary_semaphore semaphore{1};
+    };
+    
 private:
+    bool running;
+    std::string name;
     uint16_t port;
-    std::shared_ptr<USBHub> usbHubPtr;
-    std::shared_ptr<Device> wifiClientPtr;
-    std::map<uint8_t, std::vector<std::any>> subscriber_channel_map; ///< stores subscriber callbacks as any to be free of generic message type
-    std::vector<subscribe_request_packet_header_t> subscribeRequestBuffer; // This buffer stores subscribe requests so when a new connection is made, the requests will be sent
+    connection_type_t connection_type;
+    std::map<uint8_t, std::vector<std::shared_ptr<Subscriber>>> subscriber_channel_map;
+    std::shared_ptr<dispatch_queue> queue;
+    std::unique_ptr<ClientDispatcher> client_dispatcher;
 public:
-    ///
-    /// Creates a new client and starts looking for connected devices
-    /// @param connectionType either WiFi or USB
-    /// @param port listening port of the process on iOS device
-    ///
-    SwiftRobotClient(uint16_t port); // USBMUX
-    SwiftRobotClient(std::string ip_address, uint16_t port); // WIFI
+    
+    SwiftRobotClient(connection_type_t connection_type, std::string name, uint16_t port = 0);
     ~SwiftRobotClient();
     
     void start();
+    void stop();
     
     ///
     ///publishes a message. When connection is down, the messages are discared.
@@ -53,22 +52,11 @@ public:
     template<typename M>
     void publish(uint8_t channel, M msg) {
         (void)static_cast<Message*>((M*)0);
+        // local distribution
+        notify(channel, msg);
         
-        uint32_t payload_size = msg.getSize();
-        char packet[payload_size]; // 8 is size of packet headers
-        msg.serialize(packet); // copy data into packet array after header
-
-        message_packet_header_t header;
-        header.channel = channel;
-        header.type = M::type;
-        header.data_size = payload_size;
+        client_dispatcher->dispatchMessage(channel, msg, msg.getSize(), msg.type);
         
-        if (usbHubPtr) {
-            usbHubPtr.get()->send2PacketToAll(SwiftRobotPacketTypeMessage, (char*)&header, sizeof(message_packet_header_t), packet, payload_size);
-        }
-        if (wifiClientPtr) {
-            wifiClientPtr.get()->send2(SwiftRobotPacketTypeMessage, (char*)&header, sizeof(message_packet_header_t), packet, payload_size);
-        }
     };
     
     ///
@@ -80,39 +68,39 @@ public:
     template<typename M>
     void subscribe(uint8_t channel, std::function<void(M msg)> callback) {
         (void)static_cast<Message*>((M*)0);
-        subscriber_channel_map[channel].push_back(callback);
+        std::shared_ptr<Subscriber> sub = std::make_shared<Subscriber>();
+        sub->callback = callback;
+        subscriber_channel_map[channel].push_back(sub);
         
         if (channel != 0) {
-            subscribe_request_packet_header_t request = {channel};
-            addSubscribeRequest(request);
+            client_dispatcher->subscribeRequest(channel);
         }
+        
+//        if (channel != 0) {
+//            subscribe_request_packet_header_t request = {channel};
+//            addSubscribeRequest(request);
+//        }
     };
 private:
-    ///
-    /// configures USBHub instance by setting recieve callback and starts looking for connections
-    ///
-    void connectToUSBHub();
-    void connectToWifiServer();
-    void disconnectFromUSBHub();
-    void disconnectFromWifiServer();
-    
-    void addSubscribeRequest(subscribe_request_packet_header_t request_header); // called when to add a new subscribe
-    void resendSubscribeRequests(); // called after a connected status to resend all requests
-    
-    void multiplexIncomingPacket(swiftrobot_packet_type_t type, char* data, size_t size);
-    void messageReceived(char* data, size_t size);
+    void didReceiveMessage(uint16_t channel, message_packet_header_t* header, char* data);
+    void didReceiveUpdate(std::string cliendID, internal_msg::status_t);
     
     ///
     /// internal method to notify all subscribers on that channel with specified message type
     ///
     template<typename M>
     void notify(uint16_t channel,M msg) {
-        for (auto callback_any: subscriber_channel_map[channel]) {
-            try {
-                auto callback = std::any_cast<std::function<void(M msg)>>(callback_any);
-                callback(msg);
-            } catch (std::bad_any_cast& e) {
-                printf("swiftrobotc: Subscriber on Channel %d has specified wrong message type.\n", channel);
+        for (auto subscriber: subscriber_channel_map[channel]) {
+            if (subscriber->semaphore.try_acquire()) {
+                queue->dispatch([=] {
+                    try {
+                        auto callback = std::any_cast<std::function<void(M msg)>>(subscriber->callback);
+                        callback(msg);
+                        subscriber->semaphore.release();
+                    } catch (std::bad_any_cast& e) {
+                        printf("swiftrobotc: Subscriber on Channel %d has specified wrong message type.\n", channel);
+                    }
+                });
             }
         }
     }
