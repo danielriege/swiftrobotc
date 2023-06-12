@@ -8,7 +8,7 @@
 #include <map>
 #include <any>
 #include <chrono>
-#include <semaphore>
+#include <semaphore.h>
 
 #include "swiftrobotc/msgs.h"
 #include "swiftrobotc/client_dispatcher.h"

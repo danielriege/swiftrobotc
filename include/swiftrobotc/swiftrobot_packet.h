@@ -1,6 +1,7 @@
 #pragma once
 
 #include <string>
+#include <cstring>
 
 #define USBMUX_KEY_MESSAGETYPE "MessageType"
 #define USBMUX_KEY_NUMBER "Number"
