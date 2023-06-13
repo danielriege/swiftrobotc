@@ -13,10 +13,6 @@
 #include "swiftrobotc/swiftrobot_packet.h"
 #include "swiftrobotc/dispatch_queue.h"
 
-#define KEEPALIVE_TIMEOUT 5000 // milliseconds
-#define KEEPALIVE_CHECK_TIMER 500 // milliseconds
-
-
 typedef enum connection_status {
     IDLE,
     WANTING_CONNECTION,

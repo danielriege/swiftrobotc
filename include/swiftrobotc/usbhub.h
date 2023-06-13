@@ -34,6 +34,8 @@ public:
     void startLookingForConnections();
     void close();
     
+    void disconnect(std::string clientid);
+    
     void sendPacket(swiftrobot_packet_type_t type, std::string clientID, char* data, size_t size);
     /// Use this only if cliendID is unkown, like when sending connect message
     void sendPacket(swiftrobot_packet_type_t type, int deviceID, char* data, size_t size);
@@ -47,8 +49,9 @@ private:
     void broadcastHandler(swiftrobot_packet_header_t header, char*data, size_t size);
     void handleResult(usbmux_reply_code_t reply_code, swiftrobot_packet_header_t msg_header);
     void createDevice(usb_device_info_t device, uint16_t port);
-    void removeDevice(int deviceID);
     int getDeviceIDForClientID(std::string clientid);
+    
+    void removeDevice(int deviceID);
     
     static usb_device_info_t parsePropertiesPlistDict(std::map<std::string, boost::any> plist);
 };

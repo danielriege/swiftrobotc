@@ -42,6 +42,13 @@ void USBHub::createDevice(usb_device_info_t device, uint16_t port) {
     }
 }
 
+void USBHub::disconnect(std::string clientid) {
+    int deviceID = getDeviceIDForClientID(clientid);
+    if (deviceID >= 0) {
+        devices[deviceID]->disconnect();
+    }
+}
+
 void USBHub::removeDevice(int deviceID) {
     devices[deviceID]->disconnect();
     if (deviceStatusCallback != NULL) {

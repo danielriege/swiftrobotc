@@ -12,6 +12,7 @@ ClientDispatcher::ClientDispatcher(std::string globalServiceName, uint16_t port,
 void ClientDispatcher::start() {
     if (connection_type == connection_type_t::USB && usbHubPtr) {
         usbHubPtr->startLookingForConnections();
+        startKeepAliveCheckCycle();
     } else if (connection_type == connection_type_t::WIFI) {
         
     }
@@ -41,19 +42,47 @@ void ClientDispatcher::subscribeRequest(uint16_t channel) {
 // MARK:  keep alive handling
 
 void ClientDispatcher::startKeepAliveCheckCycle() {
+    keepAliveCheckRunning = true;
     
+    int randomOffset = std::rand() % KEEP_ALIVE_TIMER_RANDOM_OFFSET_MAX;
+    queue->dispatch_after(dispatch_queue::now() + std::chrono::milliseconds(KEEP_ALIVE_CHECK_TIMER + randomOffset), [&] {
+        if (!keepAliveCheckRunning) {
+            return;
+        }
+        for (auto const& [clientid, client]: clients) {
+            std::string clientid_ = clientid; // to make clang compiler happy
+            if (isTimedOut(clientid)) {
+                sendKeepAliveRequest(clientid);
+                queue->dispatch_after(dispatch_queue::now() + std::chrono::milliseconds(KEEP_ALIVE_WAITING_TIME), [this, clientid_] {
+                    if (!keepAliveCheckRunning) {
+                        return;
+                    }
+                    if (isTimedOut(clientid_)) {
+                        // disconnect from client
+                        if (usbHubPtr) {
+                            usbHubPtr->disconnect(clientid_);
+                        }
+                    }
+                });
+            }
+        }
+        startKeepAliveCheckCycle();
+    });
 }
 
 void ClientDispatcher::stopKeepAliveCheckCycle() {
-    
+    keepAliveCheckRunning = false;
 }
 
 void ClientDispatcher::updateKeepAliveTime(std::string clientid) {
-    
+    clients[clientid].lastKeepAliveResponse = std::chrono::steady_clock::now();
 }
 
 bool ClientDispatcher::isTimedOut(std::string clientid) {
-    
+    if (clients[clientid].lastKeepAliveResponse + std::chrono::milliseconds(KEEP_ALIVE_TIMEOUT) < std::chrono::steady_clock::now()) {
+        return true;
+    }
+    return false;
 }
 
 // MARK: Callbacks
@@ -108,6 +137,8 @@ void ClientDispatcher::multiplexIncomingPacket(std::string clientid, swiftrobot_
 }
 
 void ClientDispatcher::handleMessage(std::string clientid, char* data, size_t length) {
+    updateKeepAliveTime(clientid);
+    
     message_packet_header_t* receivedHeader = (message_packet_header_t*)data;
     didReceiveMessageCallback(receivedHeader->channel, receivedHeader, data+sizeof(message_packet_header_t));
 }
@@ -118,7 +149,7 @@ void ClientDispatcher::handleConnect(std::string clientid, char* data, size_t le
 }
 
 void ClientDispatcher::handleConnectAck(std::string clientid, char* data, size_t length) {
-    ExternalClient new_client{clientid, std::chrono::system_clock::now()};
+    ExternalClient new_client{clientid, std::chrono::steady_clock::now()};
     
     message_connect_header_t connect_msg = message_connect_header_t::deserialize(data);
     new_client.subscriptions = connect_msg.channels;

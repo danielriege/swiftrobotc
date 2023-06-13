@@ -161,37 +161,6 @@ void Connection::messageReceived(swiftrobot_packet_header_t header, char* data, 
     }
 }
 
-// MARK: - keep alive handlng
-
-//bool Connection::checkKeepAliveTimeout() {
-//    if (lastKeepAliveRequest + std::chrono::milliseconds(KEEPALIVE_TIMEOUT) < std::chrono::system_clock::now()) {
-//        return false;
-//    }
-//    return true;
-//}
-//
-//void Connection::startKeepAliveCheckCycle() {
-//    lastKeepAliveRequest = std::chrono::system_clock::now();
-//    if (keepAliveCycleCheckThread) {
-//        keepAliveCycleCheckThread->join();
-//    }
-//    keepAliveCycleCheckThread = std::thread(&Connection::checkKeepAliveThread, this);
-//}
-
-//void Connection::checkKeepAliveThread() {
-//    while (status == CONNECTED) {
-//        std::this_thread::sleep_for(std::chrono::milliseconds(KEEPALIVE_CHECK_TIMER));
-//        if (status != CONNECTED) {
-//            return;
-//        }
-//        if (!checkKeepAliveTimeout()) {
-//            disconnect();
-//            startConnection();
-//            return;
-//        }
-//    }
-//}
-
 std::vector<char> Connection::createUSBMuxPacket(std::string message_type, std::map<std::string, boost::any> additionalPayload) {
     std::map<std::string, boost::any> packet_dict;
     packet_dict[USBMUX_KEY_CLIENTNAME] = std::string(USBMUX_CLIENTNAME);

@@ -2,18 +2,20 @@
 
 #include <stdlib.h>
 #include <string>
+#include <chrono>
 
 #include "swiftrobotc/external_client.h"
 #include "swiftrobotc/usbhub.h"
 #include "swiftrobotc/msgs.h"
 #include "swiftrobotc/dispatch_queue.h"
 
+#define KEEP_ALIVE_WAITING_TIME 1000 // milliseconds
+#define KEEP_ALIVE_CHECK_TIMER 300 // milliseconds
+#define KEEP_ALIVE_TIMEOUT 2000 // milliseconds
+#define KEEP_ALIVE_TIMER_RANDOM_OFFSET_MAX 300 // milliseconds
+
 class ClientDispatcher {
 private:
-    const float keepAliveTimeout = 2.0; // seconds
-    const float keepAliveWaitingTime = 1.0; // seconds
-    const float keepAliveCheckTimer = 0.3; // seconds
-    const float keepAliveCheckTimerRandomOffset = 0.3; // seconds
     bool keepAliveCheckRunning = false;
     
     DispatchQueuePtr queue;
