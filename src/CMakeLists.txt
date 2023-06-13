@@ -1,3 +1,8 @@
+
+find_package(Boost COMPONENTS REQUIRED)
+
+include_directories( ${Boost_INCLUDE_DIRS} )
+
 file(GLOB PLIST_SOURCES ${PROJECT_SOURCE_DIR}/src/Plist/*.cpp)
 file(GLOB PLIST_HEADER ${PROJECT_SOURCE_DIR}/srcPlist/*.hpp)
 file(GLOB HEADER ${PROJECT_SOURCE_DIR}/include/swiftrobotc/*.h)

@@ -3,6 +3,7 @@
 
 #include <stdint.h>
 #include <map>
+#include <cstring>
 
 #define ARRAY_SIZE_SIZE 4
 

@@ -6,6 +6,7 @@
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <netdb.h>
+#include <functional>
 
 #include "swiftrobotc/mdns.h"
 
